@@ -29,7 +29,7 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
 
 function toFolderInfo(f: ApiFolder): FolderInfo {
   const name = f.specialUse === '\\Junk' ? 'Spam' : f.name
-  return { id: f.path, name, icon: f.specialUse || 'inbox', unseen: f.unseen }
+  return { id: f.path, name, icon: f.specialUse || 'inbox', unseen: f.unseen, messages: f.messages }
 }
 
 export default function App() {
@@ -51,13 +51,14 @@ export default function App() {
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null)
   const [aliases, setAliases] = useState<ApiAlias[]>([])
   const [aliasesOpen, setAliasesOpen] = useState(false)
+  const [usage, setUsage] = useState<{ usedBytes: number | null; quotaMb: number | null } | null>(null)
 
   async function loadFolders() {
     try {
       const { folders: apiFolders } = await api.getFolders()
       const mapped = apiFolders.map(toFolderInfo)
       const inboxIndex = mapped.findIndex((f) => f.icon === '\\Inbox')
-      const starred: FolderInfo = { id: 'STARRED', name: 'Starred', icon: 'starred', unseen: 0 }
+      const starred: FolderInfo = { id: 'STARRED', name: 'Starred', icon: 'starred', unseen: 0, messages: 0 }
       const withStarred =
         inboxIndex >= 0
           ? [...mapped.slice(0, inboxIndex + 1), starred, ...mapped.slice(inboxIndex + 1)]
@@ -110,6 +111,7 @@ export default function App() {
     if (email) {
       loadFolders()
       loadAliases()
+      api.getUsage().then(setUsage).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email])
@@ -386,6 +388,7 @@ export default function App() {
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
         adminUrl={role !== 'user' ? import.meta.env.VITE_ADMIN_URL : undefined}
+        usage={usage}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

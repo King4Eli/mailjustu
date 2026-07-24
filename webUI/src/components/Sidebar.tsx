@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Inbox,
   Star,
@@ -12,8 +13,12 @@ import {
   Plus,
   AtSign,
   ShieldCheck,
+  ChevronRight,
+  ChevronDown,
+  Folder,
 } from 'lucide-react'
 import type { FolderInfo } from '../types'
+import { formatBytes } from '../utils'
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   '\\Inbox': Inbox,
@@ -23,6 +28,10 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; className?: str
   '\\Trash': Trash2,
   '\\Archive': Archive,
   starred: Star,
+}
+
+function isCustomFolder(folder: FolderInfo) {
+  return folder.id !== 'STARRED' && !ICONS[folder.icon]
 }
 
 interface SidebarProps {
@@ -38,6 +47,7 @@ interface SidebarProps {
   onDeleteFolder: (path: string) => void
   onOpenAliases: () => void
   adminUrl?: string
+  usage: { usedBytes: number | null; quotaMb: number | null } | null
 }
 
 export function Sidebar({
@@ -53,11 +63,83 @@ export function Sidebar({
   onDeleteFolder,
   onOpenAliases,
   adminUrl,
+  usage,
 }: SidebarProps) {
+  const [customFoldersOpen, setCustomFoldersOpen] = useState(true)
+
   function handleNewFolder() {
     const name = window.prompt('New folder name')
     if (name && name.trim()) onCreateFolder(name.trim())
   }
+
+  function handleDeleteFolder(folder: FolderInfo) {
+    if (folder.messages > 0) {
+      window.alert(
+        `"${folder.name}" isn't empty (${folder.messages} message${folder.messages === 1 ? '' : 's'}). Move or delete its messages first.`,
+      )
+      return
+    }
+    if (window.confirm(`Delete folder "${folder.name}"?`)) onDeleteFolder(folder.id)
+  }
+
+  function renderFolderRow(folder: FolderInfo) {
+    const Icon = ICONS[folder.icon] || Inbox
+    const isActive = folder.id === activeFolder
+    const count = folder.unseen
+    const isCustom = isCustomFolder(folder)
+    return (
+      <div
+        key={folder.id}
+        className="group flex items-center rounded-lg"
+        style={{ background: isActive ? 'var(--bg-selected)' : 'transparent' }}
+      >
+        <button
+          onClick={() => {
+            onSelectFolder(folder.id)
+            onClose()
+          }}
+          className="flex flex-1 items-center gap-3 px-3 py-2 text-sm transition"
+          style={{
+            color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+            fontWeight: isActive ? 600 : 500,
+          }}
+          onMouseEnter={(e) => {
+            if (!isActive) e.currentTarget.parentElement!.style.background = 'var(--bg-hover)'
+          }}
+          onMouseLeave={(e) => {
+            if (!isActive) e.currentTarget.parentElement!.style.background = 'transparent'
+          }}
+        >
+          <Icon size={17} />
+          <span className="flex-1 truncate text-left">{folder.name}</span>
+          {count > 0 && (
+            <span
+              className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
+              style={{
+                background: isActive ? 'var(--accent)' : 'var(--bg-hover)',
+                color: isActive ? 'white' : 'var(--text-muted)',
+              }}
+            >
+              {count}
+            </span>
+          )}
+        </button>
+        {isCustom && (
+          <button
+            onClick={() => handleDeleteFolder(folder)}
+            className="hidden pr-2 group-hover:block"
+            style={{ color: 'var(--text-faint)' }}
+            title={`Delete ${folder.name}`}
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const standardFolders = folders.filter((f) => !isCustomFolder(f))
+  const customFolders = folders.filter(isCustomFolder)
 
   return (
     <>
@@ -95,63 +177,30 @@ export function Sidebar({
         </button>
 
         <nav className="flex flex-col gap-0.5 overflow-y-auto">
-          {folders.map((folder) => {
-            const Icon = ICONS[folder.icon] || Inbox
-            const isActive = folder.id === activeFolder
-            const count = folder.unseen
-            const isCustom = folder.id !== 'STARRED' && !ICONS[folder.icon]
-            return (
-              <div
-                key={folder.id}
-                className="group flex items-center rounded-lg"
-                style={{ background: isActive ? 'var(--bg-selected)' : 'transparent' }}
-              >
-                <button
-                  onClick={() => {
-                    onSelectFolder(folder.id)
-                    onClose()
-                  }}
-                  className="flex flex-1 items-center gap-3 px-3 py-2 text-sm transition"
-                  style={{
-                    color: isActive ? 'var(--accent)' : 'var(--text-muted)',
-                    fontWeight: isActive ? 600 : 500,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.parentElement!.style.background = 'var(--bg-hover)'
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) e.currentTarget.parentElement!.style.background = 'transparent'
-                  }}
-                >
-                  <Icon size={17} />
-                  <span className="flex-1 truncate text-left">{folder.name}</span>
-                  {count > 0 && (
-                    <span
-                      className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                      style={{
-                        background: isActive ? 'var(--accent)' : 'var(--bg-hover)',
-                        color: isActive ? 'white' : 'var(--text-muted)',
-                      }}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </button>
-                {isCustom && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Delete folder "${folder.name}"?`)) onDeleteFolder(folder.id)
-                    }}
-                    className="hidden pr-2 group-hover:block"
-                    style={{ color: 'var(--text-faint)' }}
-                    title={`Delete ${folder.name}`}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
+          {standardFolders.map(renderFolderRow)}
+
+          <button
+            onClick={() => setCustomFoldersOpen((v) => !v)}
+            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide transition"
+            style={{ color: 'var(--text-faint)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            {customFoldersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <Folder size={14} />
+            <span className="flex-1 text-left">Folders</span>
+            {customFolders.length > 0 && <span>{customFolders.length}</span>}
+          </button>
+          {customFoldersOpen && (
+            <div className="flex flex-col gap-0.5 pl-2">
+              {customFolders.map(renderFolderRow)}
+              {customFolders.length === 0 && (
+                <p className="px-3 py-1 text-xs" style={{ color: 'var(--text-faint)' }}>
+                  No folders yet.
+                </p>
+              )}
+            </div>
+          )}
           <button
             onClick={handleNewFolder}
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition"
@@ -184,6 +233,25 @@ export function Sidebar({
               <ShieldCheck size={15} />
               <span>Open admin dashboard</span>
             </a>
+          )}
+          {usage?.usedBytes != null && (
+            <div className="px-1 py-1">
+              <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-faint)' }}>
+                <span>Storage</span>
+                <span>
+                  {formatBytes(usage.usedBytes)} of {usage.quotaMb ?? '?'} MB
+                </span>
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded-full" style={{ background: 'var(--bg-hover)' }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, (usage.usedBytes / ((usage.quotaMb ?? 1024) * 1024 * 1024)) * 100)}%`,
+                    background: 'var(--accent)',
+                  }}
+                />
+              </div>
+            </div>
           )}
           <div className="flex items-center gap-2 text-xs">
             <span className="flex-1 truncate" style={{ color: 'var(--text-faint)' }} title={email}>

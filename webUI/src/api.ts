@@ -72,6 +72,10 @@ export interface ApiFolder {
   messages: number
 }
 
+export function getUsage(): Promise<{ usedBytes: number | null; quotaMb: number | null }> {
+  return apiFetch('/mail/usage')
+}
+
 export function getFolders(): Promise<{ folders: ApiFolder[] }> {
   return apiFetch('/mail/folders')
 }

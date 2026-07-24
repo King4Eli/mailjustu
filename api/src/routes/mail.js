@@ -6,6 +6,7 @@ import { simpleParser } from 'mailparser'
 import { withImap, resolveFolder } from '../imap.js'
 import { requireSession } from '../middleware/auth.js'
 import { pool } from '../db.js'
+import { getMailboxUsageBytes } from '../doveadm.js'
 
 export const mailRouter = Router()
 mailRouter.use(requireSession)
@@ -21,6 +22,22 @@ function cleanPreview(text) {
   if (!text) return ''
   return text.replace(/\s+/g, ' ').trim().slice(0, 160)
 }
+
+mailRouter.get('/usage', async (req, res) => {
+  const { email } = req.mailSession
+  try {
+    const [[row]] = await pool.query(
+      `SELECT COALESCE(vd.quota_mb, ?) AS quota_mb
+       FROM virtual_users vu JOIN virtual_domains vd ON vu.domain_id = vd.id
+       WHERE vu.email = ?`,
+      [Number(process.env.DEFAULT_MAILBOX_QUOTA_MB) || null, email],
+    )
+    const usedBytes = await getMailboxUsageBytes(email)
+    res.json({ usedBytes, quotaMb: row?.quota_mb ?? null })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 mailRouter.get('/folders', async (req, res) => {
   const { email, password } = req.mailSession
@@ -68,11 +85,18 @@ mailRouter.delete('/folders', async (req, res) => {
   if (!folderPath) return res.status(400).json({ error: 'path is required' })
   try {
     await withImap(email, password, async (client) => {
+      const status = await client.status(folderPath, { messages: true })
+      if (status.messages > 0) {
+        throw Object.assign(
+          new Error(`"${folderPath}" isn't empty (${status.messages} message${status.messages === 1 ? '' : 's'}). Move or delete its messages first.`),
+          { notEmpty: true },
+        )
+      }
       await client.mailboxDelete(folderPath)
     })
     res.json({ ok: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    res.status(err.notEmpty ? 409 : 500).json({ error: err.message })
   }
 })
 

@@ -25,6 +25,7 @@ export interface FolderInfo {
   name: string
   icon: string
   unseen: number
+  messages: number
 }
 
 export type MessageFilter = 'all' | 'unread' | 'read' | 'starred' | 'attachments'
