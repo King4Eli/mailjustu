@@ -1,7 +1,7 @@
 import https from 'node:https'
 
 // Queries Dovecot's doveadm HTTP API (see ./.env/dovecot.env's
-// DOVEADM_PASSWORD, consumed by ./volumes/dovecot config's
+// DOVEADM_PASSWORD, consumed by the dovecot_config volume's
 // `DOVEADM_PASSWORD = %{env:DOVEADM_PASSWORD | default}`) for a mailbox's
 // real on-disk usage, summed across all its IMAP folders. Returns null
 // (rather than throwing) on any failure so a Dovecot hiccup just hides the

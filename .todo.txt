@@ -1,15 +1,3 @@
- 
-### Fixable right now, no domain needed
->>> .env/webui.env's VITE_API_BASE_URL/VITE_ADMIN_URL and .env/admin.env's
-    VITE_API_BASE_URL still point at localhost. deploy.sh bakes these into
-    the built bundle at image-build time (see webUI/Dockerfile) -- ship a
-    live build with these unchanged and the frontend simply can't reach the
-    API, silently, from every visitor. Set both to the real public URLs
-    before running deploy.sh.
->>> CORS_ORIGIN in .env/api.env is `http://localhost:5173,http://localhost:5174`
-    -- update to the real webUI/admin origins or the API rejects every
-    browser request from the live frontend. 
-
 ### Blocked on a real, owned domain (see full detail further down)
 >>> DKIM DNS TXT record, MAIL_HOSTNAME/MAIL_PUBLIC_IP, real TLS certs, then
     tighten smtp_tls_security_level from `may` to `encrypt`.
@@ -20,12 +8,12 @@
 - DKIM signing works end to end (Mode "sv", confirmed by sending real
   mail and checking the delivered DKIM-Signature header) but the
   <selector>._domainkey.<domain> TXT record can't be published -- see
-  ./volumes/opendkim/keys/mail.txt for the record content once you have
+  the opendkim_config volume's /etc/opendkim/keys/mail.txt for the record content once you have
   a real domain.
 - MAIL_HOSTNAME/MAIL_PUBLIC_IP in ./.env/api.env are still placeholders,
   so the admin dashboard's generated MX/A/SPF/DMARC records are
   structurally correct but point nowhere.
-- TLS certs under ./volumes/certs and ./volumes/dovecot/ssl are whatever
+- TLS certs under the certs and dovecot_config named volumes are whatever
   self-signed cert shipped in the base images. Replace with real certs
   (Let's Encrypt or otherwise), then tighten Postfix's
   smtp_tls_security_level from `may` (opportunistic -- sends cleartext if
@@ -52,12 +40,12 @@
   stack, rather than silently coupling auth to an optional service.
 
 ## Cleanup / consistency, not urgent
-- ./volumes/postfix/mysql-virtual-*.cf and
-  ./volumes/dovecot/conf.d/auth-sql.conf hardcode the global_mysql
+- the postfix_config volume's mysql-virtual-*.cf and
+  the dovecot_config volume's conf.d/auth-sql.conf hardcode the global_mysql
   credentials (mysql: map files don't support env expansion) -- if you
   rotate mail_justu_password1, update both places plus ./.env/api.env.
 - The 1024M fallback quota is hardcoded in both
-  ./volumes/dovecot/conf.d/auth-sql.conf's query and quota.conf, and
+  the dovecot_config volume's conf.d/auth-sql.conf's query and quota.conf, and
   mirrored in ./.env/api.env's DEFAULT_MAILBOX_QUOTA_MB purely for the
   admin dashboard's display -- same "duplicated because config can't read
   env" situation as the DB credentials above. Keep all three in sync.
@@ -79,15 +67,19 @@
   / quota_mb are only checked when creating a new mailbox/alias/folder --
   lowering a limit doesn't retroactively remove anything already over it
   (storage quota is the exception: Dovecot enforces that live).
-- File uploads: no size/type restriction beyond multer's 25 MB-per-file/
-  10-files caps, no per-mailbox aggregate attachment quota beyond overall
-  storage quota. Downloading received attachments now works
-  (GET /api/mail/messages/:uid/attachments/:index).
-- ClamAV milter (./volumes/clamav-milter/clamav-milter.conf) fails open
+- File uploads: per-file size and count caps are now configurable
+  (MAX_ATTACHMENT_SIZE_MB/MAX_ATTACHMENTS_PER_MESSAGE in ./.env/api.env,
+  default 25 MB/10 files) and exceeding either returns a clear 400 instead
+  of a generic 500. Still no per-mailbox aggregate attachment quota beyond
+  overall storage quota. Downloading received attachments works
+  (GET /api/mail/messages/:uid/attachments/:index), and reopening a saved
+  draft now re-fetches its attachments through that same endpoint instead
+  of losing them.
+- ClamAV milter (the clamav_milter_config volume) fails open
   (`OnFail Accept`) if clamd is unreachable/erroring, so a scanner outage
   doesn't block all mail -- flip to a fail-closed action there if you'd
   rather block mail than risk missing a scan.
 - Rspamd's {= env.X =} config templating only resolves a handful of names
   baked into its own default rspamd.conf; custom env vars silently fall
   back to defaults instead of erroring. See the comment in
-  ./volumes/rspamd/local.d/worker-controller.inc. Hardcoded there instead.
+  the rspamd_config volume's local.d/worker-controller.inc. Hardcoded there instead.

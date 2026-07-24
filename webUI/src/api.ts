@@ -148,6 +148,17 @@ export async function downloadAttachment(uid: number, folder: string, index: num
   URL.revokeObjectURL(url)
 }
 
+export async function fetchAttachmentAsFile(uid: number, folder: string, index: number, filename: string): Promise<File> {
+  const session = getStoredSession()
+  const res = await fetch(
+    `${API_BASE}/mail/messages/${uid}/attachments/${index}?folder=${encodeURIComponent(folder)}`,
+    { headers: session ? { Authorization: `Bearer ${session.token}` } : {} },
+  )
+  if (!res.ok) throw new ApiError(`Failed to load attachment (${res.status})`)
+  const blob = await res.blob()
+  return new File([blob], filename, { type: blob.type })
+}
+
 export function deleteMessage(uid: number, folder: string) {
   return apiFetch(`/mail/messages/${uid}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' })
 }

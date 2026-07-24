@@ -27,14 +27,15 @@ services:
 
   # Same image, different command: runs clamav-milter instead of clamd,
   # actually wiring virus scanning into Postfix's milter chain (talks to
-  # clamd above over TCP -- see ./volumes/clamav-milter/clamav-milter.conf).
+  # clamd above over TCP -- config lives in the clamav_milter_config named
+  # volume, see /etc/clamav/clamav-milter.conf inside the container).
   mail_justu_clamav_milter:
     image: clamav/clamav
     container_name: mail-clamav-milter
     restart: unless-stopped
     command: ["clamav-milter", "-c", "/etc/clamav/clamav-milter.conf"]
     volumes:
-      - ./volumes/clamav-milter:/etc/clamav
+      - clamav_milter_config:/etc/clamav
     depends_on:
       mail_justu_clamav:
         condition: service_healthy
@@ -43,3 +44,5 @@ services:
 
 volumes:
   clamav_db:
+  clamav_milter_config:
+    name: mail_justu_clamav_milter_config

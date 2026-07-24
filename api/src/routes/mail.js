@@ -12,10 +12,32 @@ import { isValidFolderName } from '../validators.js'
 export const mailRouter = Router()
 mailRouter.use(requireSession)
 
+const MAX_ATTACHMENTS_PER_MESSAGE = Number(process.env.MAX_ATTACHMENTS_PER_MESSAGE) || 10
+const MAX_ATTACHMENT_SIZE_MB = Number(process.env.MAX_ATTACHMENT_SIZE_MB) || 25
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024, files: 10 },
+  limits: { fileSize: MAX_ATTACHMENT_SIZE_MB * 1024 * 1024, files: MAX_ATTACHMENTS_PER_MESSAGE },
 })
+
+// multer's own errors (too many files, a file too large) get thrown from
+// inside the upload.array() middleware, before our route handler ever
+// runs -- left alone, express's catch-all error handler turns them into
+// an opaque "Internal server error" with no indication of what actually
+// went wrong (this is what made oversized/too-many attachments look like
+// attachments were just silently broken). Surface them properly instead.
+function uploadAttachments(req, res, next) {
+  upload.array('attachments', MAX_ATTACHMENTS_PER_MESSAGE)(req, res, (err) => {
+    if (!err) return next()
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ error: `Too many attachments (max ${MAX_ATTACHMENTS_PER_MESSAGE}).` })
+    }
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: `Attachment too large (max ${MAX_ATTACHMENT_SIZE_MB} MB per file).` })
+    }
+    res.status(400).json({ error: err.message })
+  })
+}
 
 const LIST_LIMIT = 30
 
@@ -255,7 +277,7 @@ mailRouter.delete('/messages/:uid', async (req, res) => {
   }
 })
 
-mailRouter.post('/send', upload.array('attachments', 10), async (req, res) => {
+mailRouter.post('/send', uploadAttachments, async (req, res) => {
   const { email, password } = req.mailSession
   const { to, cc, bcc, subject, body, from } = req.body || {}
   if (!to) return res.status(400).json({ error: 'to is required' })
@@ -310,7 +332,7 @@ mailRouter.post('/send', upload.array('attachments', 10), async (req, res) => {
   }
 })
 
-mailRouter.post('/drafts', upload.array('attachments', 10), async (req, res) => {
+mailRouter.post('/drafts', uploadAttachments, async (req, res) => {
   const { email, password } = req.mailSession
   const { to, cc, bcc, subject, body, from, draftUid, draftFolder } = req.body || {}
 

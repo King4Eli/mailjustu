@@ -36,10 +36,12 @@ services:
     ports:
       - "11334:11334"
     volumes:
-      - ./volumes/rspamd:/etc/rspamd
+      - rspamd_config:/etc/rspamd
       - rspamd_data:/var/lib/rspamd
     networks:
       - mail_justu_network
 
 volumes:
   rspamd_data:
+  rspamd_config:
+    name: mail_justu_rspamd_config

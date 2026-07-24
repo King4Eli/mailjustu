@@ -9,6 +9,11 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env/postfix.env
+    volumes:
+      - postfix_config:/etc/postfix
+      - var_mail:/var/mail
+      - certs:/etc/ssl/mail
+      - postfix_spool:/var/spool/postfix
     ports:
       - "25:25"
       - "465:465"
@@ -24,9 +29,18 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env/dovecot.env
+    # Named volumes throughout, no host bind mounts -- see
+    # mail_justu_postfix above. vmail_data is the actual mailbox storage
+    # (Dovecot's mail_home is /srv/vmail/%{user}, NOT /var/mail).
+    volumes:
+      - dovecot_config:/etc/dovecot
+      - var_mail:/var/mail
+      - certs:/etc/ssl/mail
+      - vmail_data:/srv/vmail
     ports:
       # This image runs rootless: imap-login actually binds the unprivileged
-      # 31143/31993 (see ./volumes/dovecot/vendor.d/rootless.conf), not 143/993.
+      # 31143/31993 (see /etc/dovecot/vendor.d/rootless.conf in the
+      # dovecot_config volume), not 143/993.
       - "143:31143"
       - "993:31993"
     networks:
@@ -82,3 +96,17 @@ networks:
     driver: bridge
   shared-global-network:
     external: true
+
+volumes:
+  vmail_data:
+    name: mail_justu_vmail_data
+  postfix_spool:
+    name: mail_justu_postfix_spool
+  postfix_config:
+    name: mail_justu_postfix_config
+  dovecot_config:
+    name: mail_justu_dovecot_config
+  certs:
+    name: mail_justu_certs
+  var_mail:
+    name: mail_justu_var_mail

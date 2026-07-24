@@ -51,7 +51,14 @@ export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, prima
 
   function addFiles(files: FileList | null) {
     if (!files) return
-    setDraft((d) => ({ ...d, attachments: [...(d.attachments || []), ...Array.from(files)] }))
+    // Snapshot into a real array synchronously, here -- the file input's
+    // onChange clears the input (e.target.value = '') right after this
+    // returns, which also empties the live FileList e.target.files still
+    // references. Array.from(files) deferred into the setState updater
+    // (React doesn't always run updater functions synchronously) would
+    // iterate that already-emptied FileList and silently drop every file.
+    const picked = Array.from(files)
+    setDraft((d) => ({ ...d, attachments: [...(d.attachments || []), ...picked] }))
   }
 
   function removeFile(index: number) {

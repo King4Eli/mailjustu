@@ -166,12 +166,16 @@ export default function App() {
     if (isDraft) {
       try {
         const { message: detail } = await api.getMessage(Number(message.id), folder)
+        const attachments = await Promise.all(
+          (detail.attachments || []).map((a) => api.fetchAttachmentAsFile(Number(message.id), folder, a.index, a.name)),
+        )
         setComposeDraft({
           to: detail.to.join(', '),
           cc: detail.cc && detail.cc.length > 0 ? detail.cc.join(', ') : undefined,
           subject: detail.subject === '(no subject)' ? '' : detail.subject,
           body: detail.body || '',
           from: email ?? undefined,
+          attachments,
           draftUid: Number(message.id),
           draftFolder: folder,
         })
@@ -392,12 +396,9 @@ export default function App() {
         onCompose={() => setComposeDraft({ to: '', subject: '', body: '' })}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        email={email}
-        onLogout={handleLogout}
         onCreateFolder={createFolder}
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
-        adminUrl={role !== 'user' ? import.meta.env.VITE_ADMIN_URL : undefined}
         usage={usage}
       />
 
@@ -412,6 +413,9 @@ export default function App() {
             document.documentElement.setAttribute('data-theme', next)
           }}
           onToggleSidebar={() => setSidebarOpen(true)}
+          email={email}
+          adminUrl={role !== 'user' ? import.meta.env.VITE_ADMIN_URL : undefined}
+          onLogout={handleLogout}
         />
 
         {error && (

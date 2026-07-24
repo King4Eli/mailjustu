@@ -9,9 +9,11 @@ name: mail_justu
 # mail_justu_opendkim as a milter; it will simply skip that milter (per
 # milter_default_action=accept) if this file isn't included.
 #
-# Note: this ships in verify-only mode (Mode "v" in ./volumes/opendkim).
-# Actual outbound signing needs real DKIM keys + DNS records for your
-# domain, which is a deployment-specific follow-up.
+# Signs + verifies (Mode "sv", selector "mail"). Keypair and config live
+# in the opendkim_config named volume, not a host path -- exec into
+# mail-opendkim or `docker cp` to inspect/edit
+# (/etc/opendkim/opendkim.conf, /etc/opendkim/keys/mail.txt for the DNS
+# TXT record content). Publishing that record still needs a real domain.
 
 services:
   mail_justu_opendkim:
@@ -19,6 +21,10 @@ services:
     container_name: mail-opendkim
     restart: unless-stopped
     volumes:
-      - ./volumes/opendkim:/etc/opendkim
+      - opendkim_config:/etc/opendkim
     networks:
       - mail_justu_network
+
+volumes:
+  opendkim_config:
+    name: mail_justu_opendkim_config

@@ -9,10 +9,8 @@ import {
   Trash2,
   Pencil,
   Mail,
-  LogOut,
   Plus,
   AtSign,
-  ShieldCheck,
   ChevronRight,
   ChevronDown,
   Folder,
@@ -41,12 +39,9 @@ interface SidebarProps {
   onCompose: () => void
   open: boolean
   onClose: () => void
-  email: string
-  onLogout: () => void
   onCreateFolder: (name: string) => void
   onDeleteFolder: (path: string) => void
   onOpenAliases: () => void
-  adminUrl?: string
   usage: { usedBytes: number | null; quotaMb: number | null } | null
 }
 
@@ -57,12 +52,9 @@ export function Sidebar({
   onCompose,
   open,
   onClose,
-  email,
-  onLogout,
   onCreateFolder,
   onDeleteFolder,
   onOpenAliases,
-  adminUrl,
   usage,
 }: SidebarProps) {
   const [customFoldersOpen, setCustomFoldersOpen] = useState(true)
@@ -222,18 +214,6 @@ export function Sidebar({
             <AtSign size={15} />
             <span>Manage aliases</span>
           </button>
-          {adminUrl && (
-            <a
-              href={adminUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
-              style={{ color: 'var(--accent)' }}
-            >
-              <ShieldCheck size={15} />
-              <span>Open admin dashboard</span>
-            </a>
-          )}
           {usage?.usedBytes != null && (
             <div className="px-1 py-1">
               <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-faint)' }}>
@@ -253,19 +233,6 @@ export function Sidebar({
               </div>
             </div>
           )}
-          <div className="flex items-center gap-2 text-xs">
-            <span className="flex-1 truncate" style={{ color: 'var(--text-faint)' }} title={email}>
-              {email}
-            </span>
-            <button
-              onClick={onLogout}
-              title="Sign out"
-              className="rounded-lg p-1.5"
-              style={{ color: 'var(--text-faint)' }}
-            >
-              <LogOut size={15} />
-            </button>
-          </div>
         </div>
       </aside>
     </>
