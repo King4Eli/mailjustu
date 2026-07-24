@@ -49,7 +49,7 @@ services:
 
   # Backend for admin/ and webUI/:
   mail_justu_api:
-    image: king4eli/mail_justu_api:latest
+    image: kingeli/mail_justu_api:latest
     container_name: mail_justu_api
     restart: unless-stopped
     env_file:
@@ -67,7 +67,7 @@ services:
 
   # Static webUI
   mail_justu_webui:
-    image: king4eli/mail_justu_webui:latest
+    image: kingeli/mail_justu_webui:latest
     container_name: mail_justu_webui
     restart: unless-stopped
     depends_on:
@@ -80,7 +80,7 @@ services:
 
   # Static admin dashboard
   mail_justu_admin:
-    image: king4eli/mail_justu_admin:latest
+    image: kingeli/mail_justu_admin:latest
     container_name: mail_justu_admin
     restart: unless-stopped
     depends_on:
