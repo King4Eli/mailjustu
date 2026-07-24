@@ -1,0 +1,23 @@
+# Optional: DKIM signing/verification. Improves deliverability and sender
+# trust but a mail server will send/receive fine without it.
+#
+# Layer it onto the base stack with:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.opendkim.yml up -d
+#
+# Postfix is already configured (see ./.env/postfix.env) to talk to
+# mailjustu_opendkim as a milter; it will simply skip that milter (per
+# milter_default_action=accept) if this file isn't included.
+#
+# Note: this ships in verify-only mode (Mode "v" in ./volumes/opendkim).
+# Actual outbound signing needs real DKIM keys + DNS records for your
+# domain, which is a deployment-specific follow-up.
+
+services:
+  mailjustu_opendkim:
+    image: instrumentisto/opendkim
+    container_name: mail-opendkim
+    restart: unless-stopped
+    volumes:
+      - ./volumes/opendkim:/etc/opendkim
+    networks:
+      - mail

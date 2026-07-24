@@ -1,0 +1,27 @@
+# Auto-loaded by `docker compose up` alongside docker-compose.yml -- no -f
+# flags needed. Adds dev conveniences on top of the base stack:
+#   - host ports that shouldn't be open in production (e.g. raw MySQL)
+#   - bind-mounted config under ./volumes so it's visible/editable on the
+#     host and survives container recreation
+#
+# For a production deploy, run with `docker compose -f docker-compose.yml
+# up` to skip this file, or replace it with your own overlay.
+
+services:
+  mailjustu_mysql:
+    ports:
+      # 3306 is often already taken by another local MySQL instance; use
+      # 3307 on the host side to avoid colliding with it.
+      - "3307:3306"
+
+  mailjustu_postfix:
+    volumes:
+      - ./volumes/postfix:/etc/postfix
+      - ./volumes/mail:/var/mail
+      - ./volumes/certs:/etc/ssl/mail
+
+  mailjustu_dovecot:
+    volumes:
+      - ./volumes/dovecot:/etc/dovecot
+      - ./volumes/mail:/var/mail
+      - ./volumes/certs:/etc/ssl/mail

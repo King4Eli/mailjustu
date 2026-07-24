@@ -1,0 +1,21 @@
+# Optional: antivirus scanning of inbound mail and attachments. Not required
+# to run a mail server.
+#
+# Layer it onto the base stack with:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.clamav.yml up -d
+#
+# Wiring ClamAV into Postfix's content filter (so it actually scans
+# messages, not just runs standalone) is a deployment-specific follow-up.
+
+services:
+  mailjustu_clamav:
+    image: clamav/clamav
+    container_name: mail-clamav
+    restart: unless-stopped
+    volumes:
+      - clamav_db:/var/lib/clamav
+    networks:
+      - mail
+
+volumes:
+  clamav_db:

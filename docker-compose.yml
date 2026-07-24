@@ -1,0 +1,68 @@
+name: mailjustu
+
+# Base stack: the minimum required to send and receive mail.
+#   docker compose up -d
+#
+# docker-compose.override.yml is auto-loaded alongside this file and adds
+# dev-only ports plus bind-mounted, editable config under ./volumes.
+#
+# Optional add-ons (spam filtering, DKIM, antivirus) live in their own
+# docker-compose.*.yml files -- see README.md for how to layer them in.
+
+services:
+  # Stores mail-server accounts, domains, and aliases metadata.
+  mailjustu_mysql:
+    image: mysql:9
+    container_name: mail-mysql
+    restart: unless-stopped
+    env_file:
+      - ./.env/mysql.env
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - mail
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Receives and sends email over SMTP.
+  mailjustu_postfix:
+    image: boky/postfix
+    container_name: mail-postfix
+    hostname: mail.example.com
+    restart: unless-stopped
+    env_file:
+      - ./.env/postfix.env
+    depends_on:
+      mailjustu_mysql:
+        condition: service_healthy
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+    networks:
+      - mail
+
+  # Serves stored mailboxes over IMAP, including encrypted IMAPS access.
+  mailjustu_dovecot:
+    image: dovecot/dovecot
+    container_name: mail-dovecot
+    restart: unless-stopped
+    depends_on:
+      mailjustu_mysql:
+        condition: service_healthy
+    ports:
+      - "143:143"
+      - "993:993"
+    networks:
+      - mail
+
+networks:
+  mail:
+    driver: bridge
+
+volumes:
+  mysql_data:
