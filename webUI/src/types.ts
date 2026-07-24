@@ -7,6 +7,7 @@ export interface EmailMessage {
   id: string
   from: { name: string; email: string }
   to: string[]
+  cc?: string[]
   subject: string
   preview: string
   body: string

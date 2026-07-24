@@ -9,6 +9,8 @@ import {
   Pencil,
   Mail,
   LogOut,
+  Plus,
+  AtSign,
 } from 'lucide-react'
 import type { FolderInfo } from '../types'
 
@@ -31,9 +33,29 @@ interface SidebarProps {
   onClose: () => void
   email: string
   onLogout: () => void
+  onCreateFolder: (name: string) => void
+  onDeleteFolder: (path: string) => void
+  onOpenAliases: () => void
 }
 
-export function Sidebar({ folders, activeFolder, onSelectFolder, onCompose, open, onClose, email, onLogout }: SidebarProps) {
+export function Sidebar({
+  folders,
+  activeFolder,
+  onSelectFolder,
+  onCompose,
+  open,
+  onClose,
+  email,
+  onLogout,
+  onCreateFolder,
+  onDeleteFolder,
+  onOpenAliases,
+}: SidebarProps) {
+  function handleNewFolder() {
+    const name = window.prompt('New folder name')
+    if (name && name.trim()) onCreateFolder(name.trim())
+  }
+
   return (
     <>
       {open && (
@@ -69,61 +91,98 @@ export function Sidebar({ folders, activeFolder, onSelectFolder, onCompose, open
           Compose
         </button>
 
-        <nav className="flex flex-col gap-0.5">
+        <nav className="flex flex-col gap-0.5 overflow-y-auto">
           {folders.map((folder) => {
             const Icon = ICONS[folder.icon] || Inbox
             const isActive = folder.id === activeFolder
             const count = folder.unseen
+            const isCustom = folder.id !== 'STARRED' && !ICONS[folder.icon]
             return (
-              <button
+              <div
                 key={folder.id}
-                onClick={() => {
-                  onSelectFolder(folder.id)
-                  onClose()
-                }}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition"
-                style={{
-                  background: isActive ? 'var(--bg-selected)' : 'transparent',
-                  color: isActive ? 'var(--accent)' : 'var(--text-muted)',
-                  fontWeight: isActive ? 600 : 500,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.background = 'transparent'
-                }}
+                className="group flex items-center rounded-lg"
+                style={{ background: isActive ? 'var(--bg-selected)' : 'transparent' }}
               >
-                <Icon size={17} />
-                <span className="flex-1 text-left">{folder.name}</span>
-                {count > 0 && (
-                  <span
-                    className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                    style={{
-                      background: isActive ? 'var(--accent)' : 'var(--bg-hover)',
-                      color: isActive ? 'white' : 'var(--text-muted)',
+                <button
+                  onClick={() => {
+                    onSelectFolder(folder.id)
+                    onClose()
+                  }}
+                  className="flex flex-1 items-center gap-3 px-3 py-2 text-sm transition"
+                  style={{
+                    color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+                    fontWeight: isActive ? 600 : 500,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) e.currentTarget.parentElement!.style.background = 'var(--bg-hover)'
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.parentElement!.style.background = 'transparent'
+                  }}
+                >
+                  <Icon size={17} />
+                  <span className="flex-1 truncate text-left">{folder.name}</span>
+                  {count > 0 && (
+                    <span
+                      className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
+                      style={{
+                        background: isActive ? 'var(--accent)' : 'var(--bg-hover)',
+                        color: isActive ? 'white' : 'var(--text-muted)',
+                      }}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+                {isCustom && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Delete folder "${folder.name}"?`)) onDeleteFolder(folder.id)
                     }}
+                    className="hidden pr-2 group-hover:block"
+                    style={{ color: 'var(--text-faint)' }}
+                    title={`Delete ${folder.name}`}
                   >
-                    {count}
-                  </span>
+                    <Trash2 size={13} />
+                  </button>
                 )}
-              </button>
+              </div>
             )
           })}
+          <button
+            onClick={handleNewFolder}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition"
+            style={{ color: 'var(--text-faint)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Plus size={17} />
+            <span>New folder</span>
+          </button>
         </nav>
 
-        <div className="mt-auto flex items-center gap-2 border-t px-2 pt-3 text-xs" style={{ borderColor: 'var(--border)' }}>
-          <span className="flex-1 truncate" style={{ color: 'var(--text-faint)' }} title={email}>
-            {email}
-          </span>
+        <div className="mt-auto flex flex-col gap-2 border-t px-2 pt-3" style={{ borderColor: 'var(--border)' }}>
           <button
-            onClick={onLogout}
-            title="Sign out"
-            className="rounded-lg p-1.5"
+            onClick={onOpenAliases}
+            className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
             style={{ color: 'var(--text-faint)' }}
           >
-            <LogOut size={15} />
+            <AtSign size={15} />
+            <span>Manage aliases</span>
           </button>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="flex-1 truncate" style={{ color: 'var(--text-faint)' }} title={email}>
+              {email}
+            </span>
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              className="rounded-lg p-1.5"
+              style={{ color: 'var(--text-faint)' }}
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
         </div>
       </aside>
     </>

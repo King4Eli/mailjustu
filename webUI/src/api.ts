@@ -65,11 +65,20 @@ export function getFolders(): Promise<{ folders: ApiFolder[] }> {
   return apiFetch('/mail/folders')
 }
 
+export function createFolder(name: string) {
+  return apiFetch('/mail/folders', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
+export function deleteFolder(path: string) {
+  return apiFetch('/mail/folders', { method: 'DELETE', body: JSON.stringify({ path }) })
+}
+
 export interface ApiMessage {
   uid: number
   subject: string
   from: { name: string; email: string }
   to: string[]
+  cc?: string[]
   date: string
   read: boolean
   starred: boolean
@@ -100,10 +109,31 @@ export function moveMessage(uid: number, folder: string, to: string) {
   })
 }
 
+export function markAsSpam(uid: number, folder: string) {
+  return moveMessage(uid, folder, 'Junk')
+}
+
 export function deleteMessage(uid: number, folder: string) {
   return apiFetch(`/mail/messages/${uid}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' })
 }
 
-export function sendMail(to: string, subject: string, body: string) {
-  return apiFetch('/mail/send', { method: 'POST', body: JSON.stringify({ to, subject, body }) })
+export function sendMail(opts: { to: string; cc?: string; bcc?: string; subject: string; body: string; from?: string }) {
+  return apiFetch('/mail/send', { method: 'POST', body: JSON.stringify(opts) })
+}
+
+export interface ApiAlias {
+  id: number
+  source: string
+}
+
+export function getAliases(): Promise<{ aliases: ApiAlias[] }> {
+  return apiFetch('/mail/aliases')
+}
+
+export function createAlias(alias: string) {
+  return apiFetch('/mail/aliases', { method: 'POST', body: JSON.stringify({ alias }) })
+}
+
+export function deleteAlias(id: number) {
+  return apiFetch(`/mail/aliases/${id}`, { method: 'DELETE' })
 }

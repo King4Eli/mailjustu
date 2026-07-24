@@ -167,3 +167,13 @@ main { padding-left: 244px; min-height: 100vh; }
 .mailbox-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .mailbox-form input { height: 38px; border-radius: 9px; border: 1px solid #e8eaf0; padding: 0 12px; font-size: 13px; flex: 1; min-width: 200px; }
 .mailbox-form button { white-space: nowrap; }
+
+.dns-records { background: #f9fafc; border-top: 1px solid #eceef2; padding: 14px 16px 16px; }
+.dns-records-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; color: #8b93a7; }
+.dns-record { padding: 8px 0; border-bottom: 1px solid #eceef2; }
+.dns-record:last-child { border-bottom: 0; }
+.dns-record-main { display: grid; grid-template-columns: 56px 1fr 2fr 28px; align-items: center; gap: 10px; }
+.dns-type { font-size: 11px; font-weight: 700; color: #5b4cd9; background: #efecff; border-radius: 6px; padding: 3px 6px; text-align: center; }
+.dns-record-main code { font-size: 12px; color: #344055; background: #eef0f4; border-radius: 6px; padding: 4px 8px; overflow-x: auto; white-space: nowrap; }
+.dns-value { color: #172033 !important; }
+.dns-purpose { margin: 6px 0 0; font-size: 11.5px; color: #8b93a7; }

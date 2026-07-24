@@ -55,3 +55,25 @@ export function createMailbox(email, password) {
 export function deleteMailbox(id) {
   return apiFetch(`/admin/mailboxes/${id}`, { method: 'DELETE' })
 }
+
+export function getDomains() {
+  return apiFetch('/admin/domains')
+}
+
+export function createDomain(name, maxMailboxes, maxAliasesPerMailbox) {
+  return apiFetch('/admin/domains', {
+    method: 'POST',
+    body: JSON.stringify({ name, maxMailboxes: maxMailboxes || null, maxAliasesPerMailbox: maxAliasesPerMailbox || null }),
+  })
+}
+
+export function updateDomainLimits(id, maxMailboxes, maxAliasesPerMailbox) {
+  return apiFetch(`/admin/domains/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ maxMailboxes: maxMailboxes || null, maxAliasesPerMailbox: maxAliasesPerMailbox || null }),
+  })
+}
+
+export function deleteDomain(id) {
+  return apiFetch(`/admin/domains/${id}`, { method: 'DELETE' })
+}

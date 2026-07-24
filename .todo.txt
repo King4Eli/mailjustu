@@ -1,0 +1,75 @@
+Things not done, or that need a real domain/DNS/production infra to finish.
+Not urgent for local dev -- but don't assume any of this "just works" beyond
+localhost.
+
+## Needs a real, owned domain + DNS
+- OpenDKIM ships in verify-only mode (Mode "v" in ./volumes/opendkim). To
+  actually sign outbound mail: generate a keypair, publish the
+  <selector>._domainkey.<domain> TXT record, then switch Mode to "sv" and
+  add KeyTable/SigningTable entries. Can't be done against
+  mail.example.com.
+- The admin dashboard's Domains tab generates MX/A/SPF/DMARC records per
+  domain, but MAIL_HOSTNAME/MAIL_PUBLIC_IP in ./.env/api.env are still
+  placeholders -- set them to your real hostname/IP or the records it
+  prints are structurally correct but point nowhere.
+- TLS certs: ./volumes/certs and ./volumes/dovecot/ssl currently hold
+  whatever self-signed cert shipped in the base images. Replace with real
+  certs (Let's Encrypt or otherwise) for anything internet-facing.
+- Postfix's smtp_tls_security_level=may means it'll happily send in the
+  clear if the far end doesn't support TLS. Fine for internal testing,
+  not for production.
+
+## Needs infra decisions I deliberately didn't make for you
+- Mail queue visibility isn't built: real queue depth means either mounting
+  the Docker socket into api/ (root-equivalent host access -- didn't want
+  to add that silently) or adding a small authenticated helper inside the
+  postfix container. Pick one.
+- Mail activity / security event feeds: same story, need log
+  parsing/aggregation (Postfix logs to syslog inside its container, not
+  currently shipped anywhere api/ can read).
+- No per-mailbox storage quota or disk usage reporting.
+- ClamAV runs standalone -- it's not wired into Postfix's content_filter,
+  so nothing is actually scanned yet. Needs a milter/filter integration
+  decision (clamav-milter vs content_filter).
+- Removed the admin nav items/buttons that didn't do anything yet (Mail
+  activity, Mail queue, Security, Storage, Settings, notifications bell,
+  "Documentation" link, the fake "Alex Kim" profile) rather than leave
+  dead UI in front of you -- add them back once the above are real.
+
+## Cleanup / consistency, not urgent
+- ./.env/mysql.env and the old dedicated-mysql setup are unused now that
+  ./.env/api.env points at the shared global_mysql instance -- either
+  delete mysql.env or decide it's the fallback for standalone (non-shared)
+  deployments and document that split explicitly.
+- ./volumes/postfix/mysql-virtual-*.cf and
+  ./volumes/dovecot/conf.d/auth-sql.conf hardcode the global_mysql
+  credentials (mysql: map files don't support env expansion) -- if you
+  rotate mail_justu_password1, update both places plus ./.env/api.env.
+- shared-global-network is `external: true` -- this compose file will
+  refuse to start on a machine that doesn't already have that network
+  created by whatever else manages it. Not portable as-is.
+- api/src/db.js's migrate() uses plain `ALTER TABLE ADD COLUMN` wrapped in
+  a duplicate-column catch, not `ADD COLUMN IF NOT EXISTS` -- that syntax
+  errored on this MySQL 8.0.46 instance. If you add more columns later,
+  follow the same catch-ER_DUP_FIELDNAME pattern.
+- No automated tests. Everything so far has been verified by hand
+  (curl + a couple of throwaway Puppeteer scripts).
+
+## Known limitations, probably fine to leave
+- Webmail sessions are an in-memory token->credential map in api/ (see
+  api/src/middleware/auth.js) -- restarting the api container logs
+  everyone out, and it doesn't scale past one api replica.
+- No password reset / account self-service flow -- mailbox creation is
+  admin-only via the dashboard or POST /api/admin/mailboxes.
+- Aliases only forward to a mailbox on this server (virtual_aliases.
+  destination must be a real local mailbox) -- no forwarding to external
+  addresses.
+- MAX_MAILBOXES_PER_DOMAIN / MAX_ALIASES_PER_MAILBOX (and their per-domain
+  overrides, set via the admin Domains tab) are only checked when creating
+  a new mailbox/alias -- lowering a limit doesn't retroactively remove
+  anything already over it.
+- Custom IMAP folders (webUI's "New folder") have no count limit.
+- Rspamd's {= env.X =} config templating only resolves a handful of names
+  baked into its own default rspamd.conf; custom env vars silently fall
+  back to defaults instead of erroring. See the comment in
+  ./volumes/rspamd/local.d/worker-controller.inc. Hardcoded there instead.

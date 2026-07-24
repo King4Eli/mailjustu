@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer'
 import { simpleParser } from 'mailparser'
 import { withImap, resolveFolder } from '../imap.js'
 import { requireSession } from '../middleware/auth.js'
+import { pool } from '../db.js'
 
 export const mailRouter = Router()
 mailRouter.use(requireSession)
@@ -40,6 +41,34 @@ mailRouter.get('/folders', async (req, res) => {
   }
 })
 
+mailRouter.post('/folders', async (req, res) => {
+  const { email, password } = req.mailSession
+  const { name } = req.body || {}
+  if (!name || /[/\\]/.test(name)) return res.status(400).json({ error: 'name is required and cannot contain / or \\' })
+  try {
+    await withImap(email, password, async (client) => {
+      await client.mailboxCreate(name)
+    })
+    res.status(201).json({ ok: true, path: name })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+mailRouter.delete('/folders', async (req, res) => {
+  const { email, password } = req.mailSession
+  const { path: folderPath } = req.body || {}
+  if (!folderPath) return res.status(400).json({ error: 'path is required' })
+  try {
+    await withImap(email, password, async (client) => {
+      await client.mailboxDelete(folderPath)
+    })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 mailRouter.get('/messages', async (req, res) => {
   const { email, password } = req.mailSession
   const folder = req.query.folder || 'INBOX'
@@ -58,6 +87,7 @@ mailRouter.get('/messages', async (req, res) => {
             ? { name: msg.envelope.from[0].name || msg.envelope.from[0].address, email: msg.envelope.from[0].address }
             : { name: 'Unknown', email: '' },
           to: (msg.envelope.to || []).map((t) => t.address),
+          cc: (msg.envelope.cc || []).map((t) => t.address),
           date: (msg.internalDate || msg.envelope.date || new Date()).toISOString(),
           read: msg.flags.has('\\Seen'),
           starred: msg.flags.has('\\Flagged'),
@@ -91,6 +121,7 @@ mailRouter.get('/messages/:uid', async (req, res) => {
           ? { name: msg.envelope.from[0].name || msg.envelope.from[0].address, email: msg.envelope.from[0].address }
           : { name: 'Unknown', email: '' },
         to: (msg.envelope.to || []).map((t) => t.address),
+        cc: (msg.envelope.cc || []).map((t) => t.address),
         date: (msg.envelope.date || new Date()).toISOString(),
         read: true,
         starred: msg.flags.has('\\Flagged'),
@@ -164,30 +195,48 @@ mailRouter.delete('/messages/:uid', async (req, res) => {
 
 mailRouter.post('/send', async (req, res) => {
   const { email, password } = req.mailSession
-  const { to, subject, body } = req.body || {}
+  const { to, cc, bcc, subject, body, from } = req.body || {}
   if (!to) return res.status(400).json({ error: 'to is required' })
 
+  let fromAddress = email
+  if (from && from !== email) {
+    const [[owned]] = await pool.query('SELECT 1 FROM virtual_aliases WHERE source = ? AND destination = ?', [from, email])
+    if (!owned) return res.status(403).json({ error: 'You can only send from your own address or an alias you own' })
+    fromAddress = from
+  }
+
   const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'mailjustu_postfix',
+    host: process.env.SMTP_HOST || 'mail_justu_postfix',
     port: Number(process.env.SMTP_PORT) || 25,
     secure: false,
     tls: { rejectUnauthorized: false },
   })
 
   try {
-    const info = await transport.sendMail({ from: email, to, subject: subject || '(no subject)', text: body || '' })
+    const info = await transport.sendMail({
+      from: fromAddress,
+      to,
+      cc: cc || undefined,
+      bcc: bcc || undefined,
+      subject: subject || '(no subject)',
+      text: body || '',
+    })
 
     await withImap(email, password, async (client) => {
       const sent = await resolveFolder(client, email, 'Sent')
       const message = [
-        `From: ${email}`,
+        `From: ${fromAddress}`,
         `To: ${to}`,
+        cc ? `Cc: ${cc}` : null,
+        bcc ? `Bcc: ${bcc}` : null,
         `Subject: ${subject || '(no subject)'}`,
         `Date: ${new Date().toUTCString()}`,
         `Message-ID: ${info.messageId}`,
         '',
         body || '',
-      ].join('\r\n')
+      ]
+        .filter((line) => line !== null)
+        .join('\r\n')
       await client.append(sent, message, ['\\Seen'])
     }).catch(() => {})
 

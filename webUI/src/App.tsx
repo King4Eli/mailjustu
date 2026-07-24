@@ -4,9 +4,10 @@ import { TopBar } from './components/TopBar'
 import { MessageList } from './components/MessageList'
 import { ReadingPane } from './components/ReadingPane'
 import { ComposeModal, type ComposeDraft } from './components/ComposeModal'
+import { AliasesModal } from './components/AliasesModal'
 import { Login } from './components/Login'
 import * as api from './api'
-import type { ApiFolder, ApiMessage } from './api'
+import type { ApiFolder, ApiMessage, ApiAlias } from './api'
 import type { EmailMessage, FolderInfo } from './types'
 
 function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
@@ -14,6 +15,7 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
     id: String(m.uid),
     from: m.from,
     to: m.to,
+    cc: m.cc,
     subject: m.subject,
     preview: m.preview || '',
     body: m.body || '',
@@ -44,6 +46,8 @@ export default function App() {
   )
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null)
+  const [aliases, setAliases] = useState<ApiAlias[]>([])
+  const [aliasesOpen, setAliasesOpen] = useState(false)
 
   async function loadFolders() {
     try {
@@ -58,6 +62,15 @@ export default function App() {
       setFolders(withStarred)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load folders')
+    }
+  }
+
+  async function loadAliases() {
+    try {
+      const { aliases: apiAliases } = await api.getAliases()
+      setAliases(apiAliases)
+    } catch {
+      // non-fatal, aliases are a secondary feature
     }
   }
 
@@ -91,7 +104,10 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (email) loadFolders()
+    if (email) {
+      loadFolders()
+      loadAliases()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email])
 
@@ -152,17 +168,43 @@ export default function App() {
     }
   }
 
+  function clearSelectionAndRemove(id: string) {
+    setMessages((prev) => prev.filter((m) => m.id !== id))
+    setSelectedId(null)
+    setSelectedMessage(null)
+    loadFolders()
+  }
+
   async function archiveMessage(id: string) {
     const message = messages.find((m) => m.id === id)
     const folder = message?.sourceFolder || activeFolder
     try {
       await api.moveMessage(Number(id), folder, 'Archive')
-      setMessages((prev) => prev.filter((m) => m.id !== id))
-      setSelectedId(null)
-      setSelectedMessage(null)
-      loadFolders()
+      clearSelectionAndRemove(id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to archive message')
+    }
+  }
+
+  async function markSpam(id: string) {
+    const message = messages.find((m) => m.id === id)
+    const folder = message?.sourceFolder || activeFolder
+    try {
+      await api.markAsSpam(Number(id), folder)
+      clearSelectionAndRemove(id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark as spam')
+    }
+  }
+
+  async function moveTo(id: string, target: string) {
+    const message = messages.find((m) => m.id === id)
+    const folder = message?.sourceFolder || activeFolder
+    try {
+      await api.moveMessage(Number(id), folder, target)
+      clearSelectionAndRemove(id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to move message')
     }
   }
 
@@ -171,12 +213,42 @@ export default function App() {
     const folder = message?.sourceFolder || activeFolder
     try {
       await api.deleteMessage(Number(id), folder)
-      setMessages((prev) => prev.filter((m) => m.id !== id))
-      setSelectedId(null)
-      setSelectedMessage(null)
-      loadFolders()
+      clearSelectionAndRemove(id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete message')
+    }
+  }
+
+  async function createFolder(name: string) {
+    try {
+      await api.createFolder(name)
+      loadFolders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create folder')
+    }
+  }
+
+  async function deleteFolder(path: string) {
+    try {
+      await api.deleteFolder(path)
+      if (activeFolder === path) setActiveFolder('INBOX')
+      loadFolders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete folder')
+    }
+  }
+
+  async function createAlias(alias: string) {
+    await api.createAlias(alias)
+    loadAliases()
+  }
+
+  async function deleteAlias(id: number) {
+    try {
+      await api.deleteAlias(id)
+      loadAliases()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete alias')
     }
   }
 
@@ -187,6 +259,7 @@ export default function App() {
       .join('\n')}`
     setComposeDraft({
       to: mode === 'forward' ? '' : message.from.email,
+      cc: mode === 'replyAll' && message.cc ? message.cc.join(', ') : undefined,
       subject:
         mode === 'forward'
           ? message.subject.startsWith('Fwd:')
@@ -201,7 +274,14 @@ export default function App() {
 
   async function handleSend(draft: ComposeDraft) {
     try {
-      await api.sendMail(draft.to, draft.subject, draft.body)
+      await api.sendMail({
+        to: draft.to,
+        cc: draft.cc,
+        bcc: draft.bcc,
+        subject: draft.subject,
+        body: draft.body,
+        from: draft.from,
+      })
       setComposeDraft(null)
       loadFolders()
       if (activeFolder === 'Sent') loadMessages('Sent')
@@ -217,6 +297,7 @@ export default function App() {
     setMessages([])
     setSelectedId(null)
     setSelectedMessage(null)
+    setAliases([])
   }
 
   return (
@@ -234,6 +315,9 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
         email={email}
         onLogout={handleLogout}
+        onCreateFolder={createFolder}
+        onDeleteFolder={deleteFolder}
+        onOpenAliases={() => setAliasesOpen(true)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -272,9 +356,12 @@ export default function App() {
           <div className={`${selectedMessage ? 'flex' : 'hidden md:flex'} min-w-0 flex-1`}>
             <ReadingPane
               message={selectedMessage}
+              folders={folders}
               onToggleStar={toggleStar}
               onArchive={archiveMessage}
               onDelete={removeMessage}
+              onMarkSpam={markSpam}
+              onMoveTo={moveTo}
               onReply={handleReply}
               onBack={() => {
                 setSelectedId(null)
@@ -290,6 +377,17 @@ export default function App() {
           initialDraft={composeDraft}
           onClose={() => setComposeDraft(null)}
           onSend={handleSend}
+          primaryEmail={email}
+          aliases={aliases.map((a) => a.source)}
+        />
+      )}
+
+      {aliasesOpen && (
+        <AliasesModal
+          aliases={aliases}
+          onClose={() => setAliasesOpen(false)}
+          onCreate={createAlias}
+          onDelete={deleteAlias}
         />
       )}
     </div>

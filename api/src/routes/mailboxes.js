@@ -28,8 +28,27 @@ mailboxesRouter.post('/', async (req, res) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
+    const [[existingAlias]] = await conn.query('SELECT 1 FROM virtual_aliases WHERE source = ?', [normalizedEmail])
+    if (existingAlias) {
+      await conn.rollback()
+      return res.status(409).json({ error: 'That address is already an alias, not available as a mailbox' })
+    }
     await conn.query('INSERT IGNORE INTO virtual_domains (name) VALUES (?)', [domain])
-    const [[domainRow]] = await conn.query('SELECT id FROM virtual_domains WHERE name = ?', [domain])
+    const [[domainRow]] = await conn.query(
+      'SELECT id, max_mailboxes FROM virtual_domains WHERE name = ?',
+      [domain],
+    )
+    const limit = domainRow.max_mailboxes ?? Number(process.env.MAX_MAILBOXES_PER_DOMAIN) ?? null
+    if (limit) {
+      const [[{ count }]] = await conn.query(
+        'SELECT COUNT(*) AS count FROM virtual_users WHERE domain_id = ?',
+        [domainRow.id],
+      )
+      if (count >= limit) {
+        await conn.rollback()
+        return res.status(409).json({ error: `${domain} is at its mailbox limit (${limit})` })
+      }
+    }
     const hash = `{BLF-CRYPT}${bcrypt.hashSync(password, 10)}`
     const [result] = await conn.query(
       'INSERT INTO virtual_users (domain_id, email, password) VALUES (?, ?, ?)',

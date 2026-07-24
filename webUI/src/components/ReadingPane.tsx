@@ -6,23 +6,37 @@ import {
   ReplyAll,
   Forward,
   Paperclip,
-  MoreHorizontal,
+  ShieldAlert,
+  FolderInput,
   Mail,
   ArrowLeft,
 } from 'lucide-react'
-import type { EmailMessage } from '../types'
+import type { EmailMessage, FolderInfo } from '../types'
 import { formatFullDate, initials, avatarColor } from '../utils'
 
 interface ReadingPaneProps {
   message: EmailMessage | null
+  folders: FolderInfo[]
   onToggleStar: (id: string) => void
   onArchive: (id: string) => void
   onDelete: (id: string) => void
+  onMarkSpam: (id: string) => void
+  onMoveTo: (id: string, path: string) => void
   onReply: (message: EmailMessage, mode: 'reply' | 'replyAll' | 'forward') => void
   onBack?: () => void
 }
 
-export function ReadingPane({ message, onToggleStar, onArchive, onDelete, onReply, onBack }: ReadingPaneProps) {
+export function ReadingPane({
+  message,
+  folders,
+  onToggleStar,
+  onArchive,
+  onDelete,
+  onMarkSpam,
+  onMoveTo,
+  onReply,
+  onBack,
+}: ReadingPaneProps) {
   if (!message) {
     return (
       <div className="hidden flex-1 flex-col items-center justify-center gap-3 md:flex">
@@ -39,6 +53,8 @@ export function ReadingPane({ message, onToggleStar, onArchive, onDelete, onRepl
     )
   }
 
+  const movableFolders = folders.filter((f) => f.id !== 'STARRED')
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div
@@ -51,13 +67,34 @@ export function ReadingPane({ message, onToggleStar, onArchive, onDelete, onRepl
           </button>
         )}
         <ActionButton icon={Archive} label="Archive" onClick={() => onArchive(message.id)} />
+        <ActionButton icon={ShieldAlert} label="Mark as spam" onClick={() => onMarkSpam(message.id)} />
         <ActionButton icon={Trash2} label="Delete" onClick={() => onDelete(message.id)} />
+        <div className="relative flex items-center">
+          <FolderInput size={15} className="pointer-events-none absolute left-2" style={{ color: 'var(--text-muted)' }} />
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) onMoveTo(message.id, e.target.value)
+            }}
+            title="Move to folder"
+            className="appearance-none rounded-lg bg-transparent py-2 pl-7 pr-2 text-sm outline-none"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <option value="" disabled>
+              Move to...
+            </option>
+            {movableFolders.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="mx-1 h-5 w-px" style={{ background: 'var(--border)' }} />
         <ActionButton icon={Reply} label="Reply" onClick={() => onReply(message, 'reply')} />
         <ActionButton icon={ReplyAll} label="Reply all" onClick={() => onReply(message, 'replyAll')} />
         <ActionButton icon={Forward} label="Forward" onClick={() => onReply(message, 'forward')} />
         <div className="flex-1" />
-        <ActionButton icon={MoreHorizontal} label="More" onClick={() => {}} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -97,6 +134,11 @@ export function ReadingPane({ message, onToggleStar, onArchive, onDelete, onRepl
               <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
                 to {message.to.join(', ')}
               </p>
+              {message.cc && message.cc.length > 0 && (
+                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                  cc {message.cc.join(', ')}
+                </p>
+              )}
             </div>
           </div>
 

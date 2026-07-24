@@ -5,14 +5,16 @@ import { requireAdmin } from '../middleware/auth.js'
 export const healthRouter = Router()
 healthRouter.use(requireAdmin)
 
+// Hostnames come from env so renaming a service in docker-compose.yml
+// (and the corresponding .env file) is the only place that needs to change.
 const SERVICES = [
-  { name: 'Postfix', detail: 'SMTP · ports 25, 465, 587', host: 'mailjustu_postfix', port: 25 },
-  { name: 'Dovecot', detail: 'IMAP · ports 143, 993', host: 'mailjustu_dovecot', port: 31143 },
-  { name: 'Rspamd', detail: 'Spam filtering', host: 'mailjustu_rspamd', port: 11334, optional: true },
-  { name: 'OpenDKIM', detail: 'DKIM signing', host: 'mailjustu_opendkim', port: 8891, optional: true },
-  { name: 'ClamAV', detail: 'Malware scanning', host: 'mailjustu_clamav', port: 3310, optional: true },
-  { name: 'MySQL', detail: 'Account metadata', host: 'mailjustu_mysql', port: 3306 },
-  { name: 'Redis', detail: 'Rspamd cache', host: 'mailjustu_redis', port: 6379, optional: true },
+  { name: 'Postfix', detail: 'SMTP · ports 25, 465, 587', host: process.env.SMTP_HOST || 'mail_justu_postfix', port: 25 },
+  { name: 'Dovecot', detail: 'IMAP · ports 143, 993', host: process.env.IMAP_HOST || 'mail_justu_dovecot', port: 31143 },
+  { name: 'Rspamd', detail: 'Spam filtering', host: process.env.RSPAMD_HOST || 'mail_justu_rspamd', port: 11334, optional: true },
+  { name: 'OpenDKIM', detail: 'DKIM signing', host: process.env.OPENDKIM_HOST || 'mail_justu_opendkim', port: 8891, optional: true },
+  { name: 'ClamAV', detail: 'Malware scanning', host: process.env.CLAMAV_HOST || 'mail_justu_clamav', port: 3310, optional: true },
+  { name: 'MySQL', detail: 'Account metadata', host: process.env.DB_HOST || 'global_mysql', port: Number(process.env.DB_PORT) || 3306 },
+  { name: 'Redis', detail: 'Rspamd cache', host: process.env.REDIS_HOST || 'mail_justu_redis', port: 6379, optional: true },
 ]
 
 function pingPort(host, port, timeoutMs = 1500) {
