@@ -1,5 +1,5 @@
 import { Star, Paperclip } from 'lucide-react'
-import type { EmailMessage } from '../types'
+import type { EmailMessage, MessageFilter } from '../types'
 import { formatListDate, initials, avatarColor } from '../utils'
 
 interface MessageListProps {
@@ -8,9 +8,27 @@ interface MessageListProps {
   onSelect: (message: EmailMessage) => void
   onToggleStar: (id: string) => void
   folderLabel: string
+  filter: MessageFilter
+  onFilterChange: (filter: MessageFilter) => void
 }
 
-export function MessageList({ messages, selectedId, onSelect, onToggleStar, folderLabel }: MessageListProps) {
+const FILTERS: { id: MessageFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'unread', label: 'Unread' },
+  { id: 'read', label: 'Read' },
+  { id: 'starred', label: 'Starred' },
+  { id: 'attachments', label: 'Attachments' },
+]
+
+export function MessageList({
+  messages,
+  selectedId,
+  onSelect,
+  onToggleStar,
+  folderLabel,
+  filter,
+  onFilterChange,
+}: MessageListProps) {
   return (
     <div
       className="flex h-full w-full flex-col overflow-hidden border-r md:w-[360px] lg:w-[400px]"
@@ -26,6 +44,28 @@ export function MessageList({ messages, selectedId, onSelect, onToggleStar, fold
         <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
           {messages.length} {messages.length === 1 ? 'message' : 'messages'}
         </span>
+      </div>
+
+      <div
+        className="flex items-center gap-1 overflow-x-auto border-b px-3 py-2"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        {FILTERS.map((f) => {
+          const isActive = filter === f.id
+          return (
+            <button
+              key={f.id}
+              onClick={() => onFilterChange(f.id)}
+              className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition"
+              style={{
+                background: isActive ? 'var(--accent)' : 'var(--bg-hover)',
+                color: isActive ? 'white' : 'var(--text-muted)',
+              }}
+            >
+              {f.label}
+            </button>
+          )
+        })}
       </div>
 
       <div className="flex-1 overflow-y-auto">

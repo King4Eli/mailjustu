@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
+  AlertTriangle,
   Check,
   Clock3,
   Copy,
@@ -47,6 +48,29 @@ const COLORS = {
 const config = {
   title: import.meta.env.VITE_ADMIN_TITLE || 'Postmaster',
   mailHost: import.meta.env.VITE_MAIL_HOST || 'mail.example.com',
+}
+
+function formatBytes(bytes) {
+  if (bytes == null) return null
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function StorageUsage({ usedBytes, quotaMb }) {
+  if (usedBytes == null) return <span style={{ color: '#9aa1b2' }}>—</span>
+  const quotaBytes = (quotaMb ?? 1024) * 1024 * 1024
+  const pct = Math.min(100, (usedBytes / quotaBytes) * 100)
+  return (
+    <div className="storage-usage">
+      <span>
+        {formatBytes(usedBytes)} of {quotaMb ?? 1024} MB
+      </span>
+      <div className="storage-bar">
+        <div className="storage-bar-fill" style={{ width: `${pct}%`, background: pct > 90 ? '#d3352f' : '#5b4cd9' }} />
+      </div>
+    </div>
+  )
 }
 
 function NavItem({ icon: Icon, label, count, active, onClick }) {
@@ -130,12 +154,62 @@ function Login({ onAuthorized }) {
   )
 }
 
+function ConfirmDeleteModal({ title, message, confirmText, onConfirm, onCancel }) {
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const matches = input.trim() === confirmText
+
+  async function handleConfirm() {
+    if (!matches || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await onConfirm()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-icon danger"><AlertTriangle size={20} /></div>
+        <h3>{title}</h3>
+        <p>{message}</p>
+        <label className="token-label">
+          Type <strong>{confirmText}</strong> to confirm
+        </label>
+        <input
+          className="token-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={confirmText}
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
+        />
+        {error && <p className="token-error">{error}</p>}
+        <div className="modal-actions">
+          <button className="modal-cancel" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button className="modal-danger-confirm" onClick={handleConfirm} disabled={!matches || busy}>
+            {busy ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -187,13 +261,14 @@ function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) 
       {error && <p className="token-error">{error}</p>}
 
       <div className="service-table" style={{ marginTop: 20 }}>
-        <div className="service-row table-head" style={{ gridTemplateColumns: isSuper ? '2fr 1fr .8fr 32px' : '2fr 1fr 32px' }}>
-          <span>EMAIL</span><span>CREATED</span>{isSuper && <span>ADMIN</span>}<span />
+        <div className="service-row table-head" style={{ gridTemplateColumns: isSuper ? '1.6fr .8fr 1.2fr .8fr 32px' : '1.6fr .8fr 1.2fr 32px' }}>
+          <span>EMAIL</span><span>CREATED</span><span>STORAGE</span>{isSuper && <span>ADMIN</span>}<span />
         </div>
         {mailboxes.map((mailbox) => (
-          <div className="service-row" key={mailbox.id} style={{ gridTemplateColumns: isSuper ? '2fr 1fr .8fr 32px' : '2fr 1fr 32px' }}>
+          <div className="service-row" key={mailbox.id} style={{ gridTemplateColumns: isSuper ? '1.6fr .8fr 1.2fr .8fr 32px' : '1.6fr .8fr 1.2fr 32px' }}>
             <span>{mailbox.email}</span>
             <span>{new Date(mailbox.created_at).toLocaleDateString()}</span>
+            <StorageUsage usedBytes={mailbox.storageUsedBytes} quotaMb={mailbox.quota_mb} />
             {isSuper && (
               <button
                 className={mailbox.is_admin ? 'admin-badge on' : 'admin-badge'}
@@ -203,13 +278,26 @@ function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) 
                 {mailbox.is_admin ? 'Admin' : '—'}
               </button>
             )}
-            <button className="row-menu" onClick={() => onDelete(mailbox.id)} aria-label={`Delete ${mailbox.email}`}>
+            <button className="row-menu" onClick={() => setPendingDelete(mailbox)} aria-label={`Delete ${mailbox.email}`}>
               <Trash2 size={16} />
             </button>
           </div>
         ))}
         {mailboxes.length === 0 && <div className="empty">No mailboxes yet — create one above.</div>}
       </div>
+
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title="Delete mailbox?"
+          message={`This permanently deletes ${pendingDelete.email} and everything in it -- every folder, message, and attachment. This can't be undone.`}
+          confirmText={pendingDelete.email}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            await onDelete(pendingDelete.id)
+            setPendingDelete(null)
+          }}
+        />
+      )}
     </section>
   )
 }
@@ -253,6 +341,7 @@ function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -332,7 +421,7 @@ function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete }) {
                   className="row-menu"
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (window.confirm(`Delete ${domain.name}? This also deletes all its mailboxes and aliases.`)) onDelete(domain.id)
+                    setPendingDelete(domain)
                   }}
                   aria-label={`Delete ${domain.name}`}
                 >
@@ -347,6 +436,19 @@ function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete }) {
         ))}
         {domains.length === 0 && <div className="empty">No domains yet.</div>}
       </div>
+
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title="Delete domain?"
+          message={`This permanently deletes ${pendingDelete.name} and every mailbox and alias on it (${pendingDelete.mailboxCount} mailbox${pendingDelete.mailboxCount === 1 ? '' : 'es'}). This can't be undone.`}
+          confirmText={pendingDelete.name}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            await onDelete(pendingDelete.id)
+            setPendingDelete(null)
+          }}
+        />
+      )}
     </section>
   )
 }

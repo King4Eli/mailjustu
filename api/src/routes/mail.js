@@ -254,3 +254,59 @@ mailRouter.post('/send', upload.array('attachments', 10), async (req, res) => {
     res.status(500).json({ error: err.message })
   }
 })
+
+mailRouter.post('/drafts', upload.array('attachments', 10), async (req, res) => {
+  const { email, password } = req.mailSession
+  const { to, cc, bcc, subject, body, from, draftUid, draftFolder } = req.body || {}
+
+  let fromAddress = email
+  if (from && from !== email) {
+    const [[owned]] = await pool.query('SELECT 1 FROM virtual_aliases WHERE source = ? AND destination = ?', [from, email])
+    if (owned) fromAddress = from
+  }
+
+  const mailOptions = {
+    from: fromAddress,
+    to: to || undefined,
+    cc: cc || undefined,
+    bcc: bcc || undefined,
+    subject: subject || '(no subject)',
+    text: body || '',
+    attachments: (req.files || []).map((f) => ({ filename: f.originalname, content: f.buffer, contentType: f.mimetype })),
+    messageId: `<${crypto.randomUUID()}@${fromAddress.split('@')[1]}>`,
+  }
+
+  try {
+    const compiler = nodemailer.createTransport({ streamTransport: true, buffer: true })
+    const { message: raw } = await compiler.sendMail(mailOptions)
+
+    const result = await withImap(email, password, async (client) => {
+      const draftsFolder = await resolveFolder(client, email, 'Drafts')
+      const appended = await client.append(draftsFolder, raw, ['\\Draft'])
+      if (draftUid && draftFolder) {
+        await client.mailboxOpen(draftFolder)
+        await client.messageDelete({ uid: Number(draftUid), folder: draftFolder }, { uid: true }).catch(() => {})
+      }
+      return { uid: appended.uid, folder: draftsFolder }
+    })
+
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+mailRouter.delete('/drafts/:uid', async (req, res) => {
+  const { email, password } = req.mailSession
+  const folder = req.query.folder || 'Drafts'
+  const uid = Number(req.params.uid)
+  try {
+    await withImap(email, password, async (client) => {
+      await client.mailboxOpen(folder)
+      await client.messageDelete({ uid, folder }, { uid: true })
+    })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})

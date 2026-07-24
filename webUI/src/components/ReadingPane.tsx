@@ -7,6 +7,7 @@ import {
   Forward,
   Paperclip,
   ShieldAlert,
+  ShieldCheck,
   FolderInput,
   Mail,
   ArrowLeft,
@@ -21,6 +22,8 @@ interface ReadingPaneProps {
   onArchive: (id: string) => void
   onDelete: (id: string) => void
   onMarkSpam: (id: string) => void
+  onMarkNotSpam: (id: string) => void
+  isSpamFolder: boolean
   onMoveTo: (id: string, path: string) => void
   onReply: (message: EmailMessage, mode: 'reply' | 'replyAll' | 'forward') => void
   onBack?: () => void
@@ -33,6 +36,8 @@ export function ReadingPane({
   onArchive,
   onDelete,
   onMarkSpam,
+  onMarkNotSpam,
+  isSpamFolder,
   onMoveTo,
   onReply,
   onBack,
@@ -67,7 +72,11 @@ export function ReadingPane({
           </button>
         )}
         <ActionButton icon={Archive} label="Archive" onClick={() => onArchive(message.id)} />
-        <ActionButton icon={ShieldAlert} label="Mark as spam" onClick={() => onMarkSpam(message.id)} />
+        {isSpamFolder ? (
+          <ActionButton icon={ShieldCheck} label="Not spam" onClick={() => onMarkNotSpam(message.id)} />
+        ) : (
+          <ActionButton icon={ShieldAlert} label="Mark as spam" onClick={() => onMarkSpam(message.id)} />
+        )}
         <ActionButton icon={Trash2} label="Delete" onClick={() => onDelete(message.id)} />
         <div className="relative flex items-center">
           <FolderInput size={15} className="pointer-events-none absolute left-2" style={{ color: 'var(--text-muted)' }} />

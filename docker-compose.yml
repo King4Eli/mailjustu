@@ -34,6 +34,8 @@ services:
     image: dovecot/dovecot
     container_name: mail-dovecot
     restart: unless-stopped
+    env_file:
+      - ./.env/dovecot.env
     # depends_on:
     #   global_mysql:
     #     condition: service_healthy

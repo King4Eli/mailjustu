@@ -8,7 +8,7 @@ import { AliasesModal } from './components/AliasesModal'
 import { Login } from './components/Login'
 import * as api from './api'
 import type { ApiFolder, ApiMessage, ApiAlias } from './api'
-import type { EmailMessage, FolderInfo } from './types'
+import type { EmailMessage, FolderInfo, MessageFilter } from './types'
 
 function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   return {
@@ -28,7 +28,8 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
 }
 
 function toFolderInfo(f: ApiFolder): FolderInfo {
-  return { id: f.path, name: f.name, icon: f.specialUse || 'inbox', unseen: f.unseen }
+  const name = f.specialUse === '\\Junk' ? 'Spam' : f.name
+  return { id: f.path, name, icon: f.specialUse || 'inbox', unseen: f.unseen }
 }
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<EmailMessage | null>(null)
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<MessageFilter>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
@@ -128,7 +130,7 @@ export default function App() {
     )
   }
 
-  const folderMessages = query.trim()
+  const searchedMessages = query.trim()
     ? messages.filter(
         (m) =>
           m.subject.toLowerCase().includes(query.toLowerCase()) ||
@@ -137,11 +139,46 @@ export default function App() {
       )
     : messages
 
+  const folderMessages = searchedMessages.filter((m) => {
+    switch (filter) {
+      case 'unread':
+        return !m.read
+      case 'read':
+        return m.read
+      case 'starred':
+        return m.starred
+      case 'attachments':
+        return (m.attachments?.length ?? 0) > 0
+      default:
+        return true
+    }
+  })
+
   const folderLabel = folders.find((f) => f.id === activeFolder)?.name || activeFolder
+  const currentMessageFolder = selectedMessage?.sourceFolder || activeFolder
+  const isSpamFolder = folders.find((f) => f.id === currentMessageFolder)?.icon === '\\Junk'
 
   async function handleSelect(message: EmailMessage) {
-    setSelectedId(message.id)
     const folder = message.sourceFolder || activeFolder
+    const isDraft = folders.find((f) => f.id === folder)?.icon === '\\Drafts'
+    if (isDraft) {
+      try {
+        const { message: detail } = await api.getMessage(Number(message.id), folder)
+        setComposeDraft({
+          to: detail.to.join(', '),
+          cc: detail.cc && detail.cc.length > 0 ? detail.cc.join(', ') : undefined,
+          subject: detail.subject === '(no subject)' ? '' : detail.subject,
+          body: detail.body || '',
+          from: email ?? undefined,
+          draftUid: Number(message.id),
+          draftFolder: folder,
+        })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load draft')
+      }
+      return
+    }
+    setSelectedId(message.id)
     try {
       const { message: detail } = await api.getMessage(Number(message.id), folder)
       const full = toEmailMessage(detail, message.sourceFolder)
@@ -150,6 +187,17 @@ export default function App() {
       loadFolders()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load message')
+    }
+  }
+
+  async function saveDraft(draft: ComposeDraft) {
+    try {
+      await api.saveDraft(draft)
+      loadFolders()
+      const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
+      if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save draft')
     }
   }
 
@@ -196,6 +244,17 @@ export default function App() {
       clearSelectionAndRemove(id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark as spam')
+    }
+  }
+
+  async function markNotSpam(id: string) {
+    const message = messages.find((m) => m.id === id)
+    const folder = message?.sourceFolder || activeFolder
+    try {
+      await api.markAsNotSpam(Number(id), folder)
+      clearSelectionAndRemove(id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark as not spam')
     }
   }
 
@@ -285,6 +344,9 @@ export default function App() {
         from: draft.from,
         attachments: draft.attachments,
       })
+      if (draft.draftUid != null && draft.draftFolder) {
+        await api.discardDraft(draft.draftUid, draft.draftFolder).catch(() => {})
+      }
       setComposeDraft(null)
       loadFolders()
       if (activeFolder === 'Sent') loadMessages('Sent')
@@ -313,6 +375,7 @@ export default function App() {
           setActiveFolder(id)
           setSelectedId(null)
           setSelectedMessage(null)
+          setFilter('all')
         }}
         onCompose={() => setComposeDraft({ to: '', subject: '', body: '' })}
         open={sidebarOpen}
@@ -355,6 +418,8 @@ export default function App() {
               onSelect={handleSelect}
               onToggleStar={toggleStar}
               folderLabel={loading ? `${folderLabel} · loading…` : folderLabel}
+              filter={filter}
+              onFilterChange={setFilter}
             />
           </div>
 
@@ -366,6 +431,8 @@ export default function App() {
               onArchive={archiveMessage}
               onDelete={removeMessage}
               onMarkSpam={markSpam}
+              onMarkNotSpam={markNotSpam}
+              isSpamFolder={isSpamFolder}
               onMoveTo={moveTo}
               onReply={handleReply}
               onBack={() => {
@@ -381,6 +448,7 @@ export default function App() {
         <ComposeModal
           initialDraft={composeDraft}
           onClose={() => setComposeDraft(null)}
+          onSaveDraft={saveDraft}
           onSend={handleSend}
           primaryEmail={email}
           aliases={aliases.map((a) => a.source)}

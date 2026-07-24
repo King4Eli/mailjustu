@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { pool } from '../db.js'
 import { requireDomainAdmin } from '../middleware/auth.js'
+import { getMailboxUsageBytes } from '../doveadm.js'
 
 export const mailboxesRouter = Router()
 mailboxesRouter.use(requireDomainAdmin)
@@ -9,13 +10,17 @@ mailboxesRouter.use(requireDomainAdmin)
 mailboxesRouter.get('/', async (req, res) => {
   const { domain } = req.adminScope
   const [rows] = await pool.query(
-    `SELECT vu.id, vu.email, vd.name AS domain, vu.is_admin, vu.created_at
+    `SELECT vu.id, vu.email, vd.name AS domain, vu.is_admin, vu.created_at,
+            COALESCE(vd.quota_mb, ?) AS quota_mb
      FROM virtual_users vu JOIN virtual_domains vd ON vu.domain_id = vd.id
      ${domain ? 'WHERE vd.name = ?' : ''}
      ORDER BY vu.created_at DESC`,
-    domain ? [domain] : [],
+    domain ? [Number(process.env.DEFAULT_MAILBOX_QUOTA_MB) || null, domain] : [Number(process.env.DEFAULT_MAILBOX_QUOTA_MB) || null],
   )
-  res.json({ mailboxes: rows })
+  const mailboxes = await Promise.all(
+    rows.map(async (row) => ({ ...row, storageUsedBytes: await getMailboxUsageBytes(row.email) })),
+  )
+  res.json({ mailboxes })
 })
 
 mailboxesRouter.post('/', async (req, res) => {

@@ -99,9 +99,14 @@ localhost.
   and no per-mailbox aggregate attachment quota beyond the mailbox's
   overall storage quota. Receiving attachments works (parsed via
   mailparser, name+size shown) but there's no download endpoint yet.
-- No per-mailbox storage USAGE reporting (quota is enforced, but nothing
-  surfaces "X of Y MB used" in the admin dashboard) -- would need
-  `doveadm quota get` piped through api/.
+- Per-mailbox storage usage now shows in the admin Mailboxes tab ("X of Y
+  MB used" + a bar), via Dovecot's doveadm HTTP API (api/src/doveadm.js,
+  doveadm mailboxStatus vsize, summed across folders). Needed
+  DOVEADM_PASSWORD wired through ./.env/dovecot.env + ./.env/api.env
+  (Dovecot's doveadm HTTP listener was already configured for this, just
+  unused) -- and Dovecot's HTTP server rejects Host headers with
+  underscores, so the client overrides Host since our service name is
+  mail_justu_dovecot.
 - Rspamd's {= env.X =} config templating only resolves a handful of names
   baked into its own default rspamd.conf; custom env vars silently fall
   back to defaults instead of erroring. See the comment in

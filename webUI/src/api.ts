@@ -124,6 +124,10 @@ export function markAsSpam(uid: number, folder: string) {
   return moveMessage(uid, folder, 'Junk')
 }
 
+export function markAsNotSpam(uid: number, folder: string) {
+  return moveMessage(uid, folder, 'Inbox')
+}
+
 export function deleteMessage(uid: number, folder: string) {
   return apiFetch(`/mail/messages/${uid}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' })
 }
@@ -146,6 +150,34 @@ export function sendMail(opts: {
   if (opts.from) form.set('from', opts.from)
   for (const file of opts.attachments || []) form.append('attachments', file)
   return apiFetch('/mail/send', { method: 'POST', body: form })
+}
+
+export function saveDraft(opts: {
+  to?: string
+  cc?: string
+  bcc?: string
+  subject?: string
+  body?: string
+  from?: string
+  draftUid?: number
+  draftFolder?: string
+  attachments?: File[]
+}): Promise<{ ok: boolean; uid: number; folder: string }> {
+  const form = new FormData()
+  if (opts.to) form.set('to', opts.to)
+  if (opts.cc) form.set('cc', opts.cc)
+  if (opts.bcc) form.set('bcc', opts.bcc)
+  form.set('subject', opts.subject || '')
+  form.set('body', opts.body || '')
+  if (opts.from) form.set('from', opts.from)
+  if (opts.draftUid != null) form.set('draftUid', String(opts.draftUid))
+  if (opts.draftFolder) form.set('draftFolder', opts.draftFolder)
+  for (const file of opts.attachments || []) form.append('attachments', file)
+  return apiFetch('/mail/drafts', { method: 'POST', body: form })
+}
+
+export function discardDraft(uid: number, folder: string) {
+  return apiFetch(`/mail/drafts/${uid}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' })
 }
 
 export interface ApiAlias {

@@ -9,11 +9,16 @@ export interface ComposeDraft {
   body: string
   from?: string
   attachments?: File[]
+  // Set when this draft was opened from the Drafts folder -- lets saving
+  // and sending replace the original message instead of duplicating it.
+  draftUid?: number
+  draftFolder?: string
 }
 
 interface ComposeModalProps {
   initialDraft: ComposeDraft
   onClose: () => void
+  onSaveDraft: (draft: ComposeDraft) => void
   onSend: (draft: ComposeDraft) => void
   primaryEmail: string
   aliases: string[]
@@ -25,12 +30,18 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function ComposeModal({ initialDraft, onClose, onSend, primaryEmail, aliases }: ComposeModalProps) {
+export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, primaryEmail, aliases }: ComposeModalProps) {
   const [draft, setDraft] = useState<ComposeDraft>({ from: primaryEmail, attachments: [], ...initialDraft })
   const [minimized, setMinimized] = useState(false)
   const [showCc, setShowCc] = useState(Boolean(initialDraft.cc || initialDraft.bcc))
   const [sending, setSending] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleCloseWithSave() {
+    const hasContent = draft.to.trim() || draft.subject.trim() || draft.body.trim() || (draft.attachments?.length ?? 0) > 0
+    if (hasContent) onSaveDraft(draft)
+    onClose()
+  }
 
   useEffect(() => {
     setDraft({ from: primaryEmail, attachments: [], ...initialDraft })
@@ -70,7 +81,7 @@ export function ComposeModal({ initialDraft, onClose, onSend, primaryEmail, alia
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onClose()
+              handleCloseWithSave()
             }}
             style={{ color: 'var(--text-faint)' }}
           >
@@ -94,7 +105,7 @@ export function ComposeModal({ initialDraft, onClose, onSend, primaryEmail, alia
           <button onClick={() => setMinimized(true)} className="rounded p-1 text-white/90 hover:bg-white/10">
             <Minus size={15} />
           </button>
-          <button onClick={onClose} className="rounded p-1 text-white/90 hover:bg-white/10">
+          <button onClick={handleCloseWithSave} className="rounded p-1 text-white/90 hover:bg-white/10">
             <X size={16} />
           </button>
         </div>
