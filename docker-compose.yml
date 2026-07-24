@@ -4,7 +4,7 @@ services:
   # Receives and sends email over SMTP.
   mail_justu_postfix:
     image: boky/postfix
-    container_name: mail-postfix
+    container_name: mail_justu_postfix
     hostname: mail.example.com
     restart: unless-stopped
     env_file:
@@ -25,7 +25,7 @@ services:
   # Serves stored mailboxes over IMAP, including encrypted IMAPS access.
   mail_justu_dovecot:
     image: dovecot/dovecot
-    container_name: mail-dovecot
+    container_name: mail_justu_dovecot
     restart: unless-stopped
     env_file:
       - ./.env/dovecot.env
