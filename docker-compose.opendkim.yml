@@ -5,7 +5,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.opendkim.yml up -d
 #
 # Postfix is already configured (see ./.env/postfix.env) to talk to
-# mailjustu_opendkim as a milter; it will simply skip that milter (per
+# mail_justu_opendkim as a milter; it will simply skip that milter (per
 # milter_default_action=accept) if this file isn't included.
 #
 # Note: this ships in verify-only mode (Mode "v" in ./volumes/opendkim).
@@ -13,7 +13,7 @@
 # domain, which is a deployment-specific follow-up.
 
 services:
-  mailjustu_opendkim:
+  mail_justu_opendkim:
     image: instrumentisto/opendkim
     container_name: mail-opendkim
     restart: unless-stopped

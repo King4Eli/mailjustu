@@ -8,30 +8,32 @@ import {
   Trash2,
   Pencil,
   Mail,
+  LogOut,
 } from 'lucide-react'
-import type { FolderId } from '../types'
-import { folders } from '../data/mockData'
+import type { FolderInfo } from '../types'
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-  inbox: Inbox,
-  star: Star,
-  send: Send,
-  'file-text': FileText,
-  archive: Archive,
-  'shield-alert': ShieldAlert,
-  'trash-2': Trash2,
+  '\\Inbox': Inbox,
+  '\\Sent': Send,
+  '\\Drafts': FileText,
+  '\\Junk': ShieldAlert,
+  '\\Trash': Trash2,
+  '\\Archive': Archive,
+  starred: Star,
 }
 
 interface SidebarProps {
-  activeFolder: FolderId
-  onSelectFolder: (id: FolderId) => void
+  folders: FolderInfo[]
+  activeFolder: string
+  onSelectFolder: (id: string) => void
   onCompose: () => void
-  unreadCounts: Record<string, number>
   open: boolean
   onClose: () => void
+  email: string
+  onLogout: () => void
 }
 
-export function Sidebar({ activeFolder, onSelectFolder, onCompose, unreadCounts, open, onClose }: SidebarProps) {
+export function Sidebar({ folders, activeFolder, onSelectFolder, onCompose, open, onClose, email, onLogout }: SidebarProps) {
   return (
     <>
       {open && (
@@ -69,9 +71,9 @@ export function Sidebar({ activeFolder, onSelectFolder, onCompose, unreadCounts,
 
         <nav className="flex flex-col gap-0.5">
           {folders.map((folder) => {
-            const Icon = ICONS[folder.icon]
+            const Icon = ICONS[folder.icon] || Inbox
             const isActive = folder.id === activeFolder
-            const count = unreadCounts[folder.id] ?? 0
+            const count = folder.unseen
             return (
               <button
                 key={folder.id}
@@ -110,13 +112,18 @@ export function Sidebar({ activeFolder, onSelectFolder, onCompose, unreadCounts,
           })}
         </nav>
 
-        <div className="mt-auto px-2 pb-1 pt-4 text-xs" style={{ color: 'var(--text-faint)' }}>
-          <div className="flex items-center justify-between">
-            <span>2.1 GB of 15 GB used</span>
-          </div>
-          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--bg-hover)' }}>
-            <div className="h-full rounded-full" style={{ width: '14%', background: 'var(--accent)' }} />
-          </div>
+        <div className="mt-auto flex items-center gap-2 border-t px-2 pt-3 text-xs" style={{ borderColor: 'var(--border)' }}>
+          <span className="flex-1 truncate" style={{ color: 'var(--text-faint)' }} title={email}>
+            {email}
+          </span>
+          <button
+            onClick={onLogout}
+            title="Sign out"
+            className="rounded-lg p-1.5"
+            style={{ color: 'var(--text-faint)' }}
+          >
+            <LogOut size={15} />
+          </button>
         </div>
       </aside>
     </>

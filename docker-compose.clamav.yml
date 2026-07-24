@@ -8,7 +8,7 @@
 # messages, not just runs standalone) is a deployment-specific follow-up.
 
 services:
-  mailjustu_clamav:
+  mail_justu_clamav:
     image: clamav/clamav
     container_name: mail-clamav
     restart: unless-stopped

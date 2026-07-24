@@ -1,76 +1,183 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { MessageList } from './components/MessageList'
 import { ReadingPane } from './components/ReadingPane'
 import { ComposeModal, type ComposeDraft } from './components/ComposeModal'
-import { folders as folderList, messages as initialMessages } from './data/mockData'
-import type { EmailMessage, FolderId } from './types'
+import { Login } from './components/Login'
+import * as api from './api'
+import type { ApiFolder, ApiMessage } from './api'
+import type { EmailMessage, FolderInfo } from './types'
 
-const FOLDER_NAMES: Record<FolderId, string> = Object.fromEntries(
-  folderList.map((f) => [f.id, f.name]),
-) as Record<FolderId, string>
+function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
+  return {
+    id: String(m.uid),
+    from: m.from,
+    to: m.to,
+    subject: m.subject,
+    preview: m.preview || '',
+    body: m.body || '',
+    date: m.date,
+    read: m.read,
+    starred: m.starred,
+    attachments: m.attachments,
+    sourceFolder,
+  }
+}
+
+function toFolderInfo(f: ApiFolder): FolderInfo {
+  return { id: f.path, name: f.name, icon: f.specialUse || 'inbox', unseen: f.unseen }
+}
 
 export default function App() {
-  const [messages, setMessages] = useState<EmailMessage[]>(initialMessages)
-  const [activeFolder, setActiveFolder] = useState<FolderId>('inbox')
+  const [email, setEmail] = useState<string | null>(() => api.getStoredSession()?.email ?? null)
+  const [folders, setFolders] = useState<FolderInfo[]>([])
+  const [activeFolder, setActiveFolder] = useState('INBOX')
+  const [messages, setMessages] = useState<EmailMessage[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedMessage, setSelectedMessage] = useState<EmailMessage | null>(null)
   const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null)
 
-  const folderMessages = useMemo(() => {
-    const inFolder =
-      activeFolder === 'starred'
-        ? messages.filter((m) => m.starred)
-        : messages.filter((m) => m.folder === activeFolder)
-    const q = query.trim().toLowerCase()
-    const filtered = q
-      ? inFolder.filter(
-          (m) =>
-            m.subject.toLowerCase().includes(q) ||
-            m.from.name.toLowerCase().includes(q) ||
-            m.preview.toLowerCase().includes(q),
+  async function loadFolders() {
+    try {
+      const { folders: apiFolders } = await api.getFolders()
+      const mapped = apiFolders.map(toFolderInfo)
+      const inboxIndex = mapped.findIndex((f) => f.icon === '\\Inbox')
+      const starred: FolderInfo = { id: 'STARRED', name: 'Starred', icon: 'starred', unseen: 0 }
+      const withStarred =
+        inboxIndex >= 0
+          ? [...mapped.slice(0, inboxIndex + 1), starred, ...mapped.slice(inboxIndex + 1)]
+          : [starred, ...mapped]
+      setFolders(withStarred)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load folders')
+    }
+  }
+
+  async function loadMessages(folderId: string) {
+    setLoading(true)
+    setError('')
+    try {
+      if (folderId === 'STARRED') {
+        const realFolders = folders.filter((f) => f.id !== 'STARRED')
+        const results = await Promise.all(
+          realFolders.map(async (f) => {
+            const { messages: apiMessages } = await api.getMessages(f.id)
+            return apiMessages.filter((m) => m.starred).map((m) => toEmailMessage(m, f.id))
+          }),
         )
-      : inFolder
-    return [...filtered].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [messages, activeFolder, query])
-
-  const selectedMessage = messages.find((m) => m.id === selectedId) ?? null
-
-  const unreadCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const folder of folderList) {
-      counts[folder.id] =
-        folder.id === 'starred'
-          ? messages.filter((m) => m.starred && !m.read).length
-          : messages.filter((m) => m.folder === folder.id && !m.read).length
+        const merged = results.flat().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        setMessages(merged)
+      } else {
+        const { messages: apiMessages } = await api.getMessages(folderId)
+        setMessages(
+          apiMessages
+            .map((m) => toEmailMessage(m))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        )
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load messages')
+    } finally {
+      setLoading(false)
     }
-    return counts
-  }, [messages])
+  }
 
-  function handleSelect(message: EmailMessage) {
+  useEffect(() => {
+    if (email) loadFolders()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email])
+
+  useEffect(() => {
+    if (email && folders.length > 0) loadMessages(activeFolder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, activeFolder, folders.length])
+
+  if (!email) {
+    return (
+      <Login
+        onLogin={(loggedInEmail) => {
+          setEmail(loggedInEmail)
+        }}
+      />
+    )
+  }
+
+  const folderMessages = query.trim()
+    ? messages.filter(
+        (m) =>
+          m.subject.toLowerCase().includes(query.toLowerCase()) ||
+          m.from.name.toLowerCase().includes(query.toLowerCase()) ||
+          m.preview.toLowerCase().includes(query.toLowerCase()),
+      )
+    : messages
+
+  const folderLabel = folders.find((f) => f.id === activeFolder)?.name || activeFolder
+
+  async function handleSelect(message: EmailMessage) {
     setSelectedId(message.id)
-    if (!message.read) {
+    const folder = message.sourceFolder || activeFolder
+    try {
+      const { message: detail } = await api.getMessage(Number(message.id), folder)
+      const full = toEmailMessage(detail, message.sourceFolder)
+      setSelectedMessage(full)
       setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, read: true } : m)))
+      loadFolders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load message')
     }
   }
 
-  function toggleStar(id: string) {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, starred: !m.starred } : m)))
+  async function toggleStar(id: string) {
+    const message = messages.find((m) => m.id === id) || (selectedMessage?.id === id ? selectedMessage : null)
+    if (!message) return
+    const folder = message.sourceFolder || activeFolder
+    const nextStarred = !message.starred
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, starred: nextStarred } : m)))
+    if (selectedMessage?.id === id) setSelectedMessage({ ...selectedMessage, starred: nextStarred })
+    try {
+      await api.setFlag(Number(id), folder, 'starred', nextStarred)
+      if (activeFolder === 'STARRED' && !nextStarred) {
+        setMessages((prev) => prev.filter((m) => m.id !== id))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update star')
+    }
   }
 
-  function archiveMessage(id: string) {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, folder: 'archive' } : m)))
-    setSelectedId(null)
+  async function archiveMessage(id: string) {
+    const message = messages.find((m) => m.id === id)
+    const folder = message?.sourceFolder || activeFolder
+    try {
+      await api.moveMessage(Number(id), folder, 'Archive')
+      setMessages((prev) => prev.filter((m) => m.id !== id))
+      setSelectedId(null)
+      setSelectedMessage(null)
+      loadFolders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to archive message')
+    }
   }
 
-  function deleteMessage(id: string) {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, folder: 'trash' } : m)))
-    setSelectedId(null)
+  async function removeMessage(id: string) {
+    const message = messages.find((m) => m.id === id)
+    const folder = message?.sourceFolder || activeFolder
+    try {
+      await api.deleteMessage(Number(id), folder)
+      setMessages((prev) => prev.filter((m) => m.id !== id))
+      setSelectedId(null)
+      setSelectedMessage(null)
+      loadFolders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete message')
+    }
   }
 
   function handleReply(message: EmailMessage, mode: 'reply' | 'replyAll' | 'forward') {
@@ -92,38 +199,41 @@ export default function App() {
     })
   }
 
-  function handleSend(draft: ComposeDraft) {
-    const newMessage: EmailMessage = {
-      id: `sent-${Date.now()}`,
-      folder: 'sent',
-      from: { name: 'Me', email: 'me@example.com' },
-      to: draft.to
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-      subject: draft.subject || '(no subject)',
-      preview: draft.body.slice(0, 120),
-      body: draft.body,
-      date: new Date().toISOString(),
-      read: true,
-      starred: false,
+  async function handleSend(draft: ComposeDraft) {
+    try {
+      await api.sendMail(draft.to, draft.subject, draft.body)
+      setComposeDraft(null)
+      loadFolders()
+      if (activeFolder === 'Sent') loadMessages('Sent')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message')
     }
-    setMessages((prev) => [newMessage, ...prev])
-    setComposeDraft(null)
+  }
+
+  async function handleLogout() {
+    await api.logout()
+    setEmail(null)
+    setFolders([])
+    setMessages([])
+    setSelectedId(null)
+    setSelectedMessage(null)
   }
 
   return (
     <div className="flex h-screen w-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       <Sidebar
+        folders={folders}
         activeFolder={activeFolder}
         onSelectFolder={(id) => {
           setActiveFolder(id)
           setSelectedId(null)
+          setSelectedMessage(null)
         }}
         onCompose={() => setComposeDraft({ to: '', subject: '', body: '' })}
-        unreadCounts={unreadCounts}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        email={email}
+        onLogout={handleLogout}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -139,6 +249,15 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen(true)}
         />
 
+        {error && (
+          <div
+            className="border-b px-4 py-2 text-sm"
+            style={{ borderColor: 'var(--border)', color: 'var(--danger)', background: 'var(--bg-elevated)' }}
+          >
+            {error}
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1">
           <div className={`${selectedMessage ? 'hidden md:flex' : 'flex'} w-full md:w-auto`}>
             <MessageList
@@ -146,7 +265,7 @@ export default function App() {
               selectedId={selectedId}
               onSelect={handleSelect}
               onToggleStar={toggleStar}
-              folderLabel={FOLDER_NAMES[activeFolder]}
+              folderLabel={loading ? `${folderLabel} · loading…` : folderLabel}
             />
           </div>
 
@@ -155,9 +274,12 @@ export default function App() {
               message={selectedMessage}
               onToggleStar={toggleStar}
               onArchive={archiveMessage}
-              onDelete={deleteMessage}
+              onDelete={removeMessage}
               onReply={handleReply}
-              onBack={() => setSelectedId(null)}
+              onBack={() => {
+                setSelectedId(null)
+                setSelectedMessage(null)
+              }}
             />
           </div>
         </div>

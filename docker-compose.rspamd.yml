@@ -5,12 +5,12 @@
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.rspamd.yml up -d
 #
 # Postfix is already configured (see ./.env/postfix.env) to talk to
-# mailjustu_rspamd as a milter; it will simply skip that milter (per
+# mail_justu_rspamd as a milter; it will simply skip that milter (per
 # milter_default_action=accept) if this file isn't included.
 
 services:
   # Fast in-memory storage used by Rspamd for caching and spam analysis.
-  mailjustu_redis:
+  mail_justu_redis:
     image: redis:8-alpine
     container_name: mail-redis
     restart: unless-stopped
@@ -23,14 +23,14 @@ services:
       retries: 10
 
   # Analyzes messages for spam and assigns filtering scores before delivery.
-  mailjustu_rspamd:
+  mail_justu_rspamd:
     image: rspamd/rspamd
     container_name: mail-rspamd
     restart: unless-stopped
     env_file:
       - ./.env/rspamd.env
     depends_on:
-      mailjustu_redis:
+      mail_justu_redis:
         condition: service_healthy
     ports:
       - "11334:11334"

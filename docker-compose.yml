@@ -1,4 +1,4 @@
-name: mailjustu
+name: mail_justu
 
 # Base stack: the minimum required to send and receive mail.
 #   docker compose up -d
@@ -10,59 +10,68 @@ name: mailjustu
 # docker-compose.*.yml files -- see README.md for how to layer them in.
 
 services:
-  # Stores mail-server accounts, domains, and aliases metadata.
-  mailjustu_mysql:
-    image: mysql:9
-    container_name: mail-mysql
-    restart: unless-stopped
-    env_file:
-      - ./.env/mysql.env
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - mail
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
   # Receives and sends email over SMTP.
-  mailjustu_postfix:
+  mail_justu_postfix:
     image: boky/postfix
     container_name: mail-postfix
     hostname: mail.example.com
     restart: unless-stopped
     env_file:
       - ./.env/postfix.env
-    depends_on:
-      mailjustu_mysql:
-        condition: service_healthy
+    # depends_on:
+    #   global_mysql:
+    #     condition: service_healthy
     ports:
       - "25:25"
       - "465:465"
       - "587:587"
     networks:
       - mail
+      - shared-global-network
 
   # Serves stored mailboxes over IMAP, including encrypted IMAPS access.
-  mailjustu_dovecot:
+  mail_justu_dovecot:
     image: dovecot/dovecot
     container_name: mail-dovecot
     restart: unless-stopped
-    depends_on:
-      mailjustu_mysql:
-        condition: service_healthy
+    # depends_on:
+    #   global_mysql:
+    #     condition: service_healthy
     ports:
-      - "143:143"
-      - "993:993"
+      # This image runs rootless: imap-login actually binds the unprivileged
+      # 31143/31993 (see ./volumes/dovecot/vendor.d/rootless.conf), not 143/993.
+      - "143:31143"
+      - "993:31993"
     networks:
       - mail
+      - shared-global-network
+
+  # Backend for admin/ and webUI/: mailbox management, IMAP/SMTP for
+  # webmail, and service health/stats. Browsers never talk to the mail
+  # stack directly.
+  mail_justu_api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: mail_justu_api
+    restart: unless-stopped
+    env_file:
+      - ./.env/api.env
+    depends_on:
+      # global_mysql:
+      #   condition: service_healthy
+      mail_justu_postfix:
+        condition: service_started
+      mail_justu_dovecot:
+        condition: service_started
+    ports:
+      - "4000:4000"
+    networks:
+      - mail
+      - shared-global-network
 
 networks:
   mail:
     driver: bridge
-
-volumes:
-  mysql_data:
+  shared-global-network:
+    external: true

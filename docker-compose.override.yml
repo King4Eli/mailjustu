@@ -8,19 +8,13 @@
 # up` to skip this file, or replace it with your own overlay.
 
 services:
-  mailjustu_mysql:
-    ports:
-      # 3306 is often already taken by another local MySQL instance; use
-      # 3307 on the host side to avoid colliding with it.
-      - "3307:3306"
-
-  mailjustu_postfix:
+  mail_justu_postfix:
     volumes:
       - ./volumes/postfix:/etc/postfix
       - ./volumes/mail:/var/mail
       - ./volumes/certs:/etc/ssl/mail
 
-  mailjustu_dovecot:
+  mail_justu_dovecot:
     volumes:
       - ./volumes/dovecot:/etc/dovecot
       - ./volumes/mail:/var/mail

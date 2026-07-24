@@ -1,11 +1,3 @@
-export type FolderId = 'inbox' | 'starred' | 'sent' | 'drafts' | 'archive' | 'spam' | 'trash'
-
-export interface Folder {
-  id: FolderId
-  name: string
-  icon: string
-}
-
 export interface Attachment {
   name: string
   size: string
@@ -13,7 +5,6 @@ export interface Attachment {
 
 export interface EmailMessage {
   id: string
-  folder: FolderId
   from: { name: string; email: string }
   to: string[]
   subject: string
@@ -22,6 +13,15 @@ export interface EmailMessage {
   date: string
   read: boolean
   starred: boolean
-  labels?: string[]
   attachments?: Attachment[]
+  // Only set in the aggregated "Starred" view, so actions know which real
+  // IMAP folder the message actually lives in.
+  sourceFolder?: string
+}
+
+export interface FolderInfo {
+  id: string
+  name: string
+  icon: string
+  unseen: number
 }

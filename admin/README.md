@@ -1,12 +1,12 @@
 # Postmaster Admin
 
-A responsive React dashboard for the mail server Compose stack. It provides an interface for service health, mail traffic, delivery metrics, security events, and container resource usage.
+A responsive React dashboard for the mail server Compose stack: live service health (real TCP checks), real Rspamd stats, and mailbox management. Talks to `../api/` -- nothing here reaches Docker or the mail stack directly.
 
-The current dashboard uses clearly marked demo data. Connect it to a protected backend API before using service controls or displaying production metrics; browsers should not access the Docker socket directly.
+On load it asks for the API's `ADMIN_TOKEN` (see `../.env/api.env`) and keeps it in memory/localStorage; it's never bundled into the built JS, unlike `VITE_`-prefixed values.
 
 ## Run locally
 
-Requires Node.js 20 or newer.
+Requires Node.js 20 or newer, and the `api` container (or `node api/src/index.js`) running.
 
 ```bash
 npm install
