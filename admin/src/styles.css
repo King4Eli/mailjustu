@@ -163,10 +163,16 @@ main { padding-left: 244px; min-height: 100vh; }
 .token-label { display: block; font-size: 12px; font-weight: 600; color: #6b7386; margin-bottom: 6px; }
 .token-input { width: 100%; height: 40px; border-radius: 9px; border: 1px solid #e8eaf0; padding: 0 12px; font-size: 13.5px; margin-bottom: 14px; }
 .token-error { color: #d3352f; font-size: 12.5px; margin: -6px 0 14px; }
+.token-hint { margin: 14px 0 0; font-size: 11.5px; color: #9aa1b2; text-align: center; }
 
 .mailbox-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .mailbox-form input { height: 38px; border-radius: 9px; border: 1px solid #e8eaf0; padding: 0 12px; font-size: 13px; flex: 1; min-width: 200px; }
 .mailbox-form button { white-space: nowrap; }
+.admin-checkbox { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #6b7386; white-space: nowrap; }
+
+.admin-badge { border: 1px solid #e8eaf0; background: #fff; color: #9aa1b2; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.admin-badge.on { background: #efecff; border-color: #d9d3ff; color: #5b4cd9; }
+.logout-button { border: 0; background: transparent; color: #98a0ae; cursor: pointer; padding: 4px; justify-self: end; }
 
 .dns-records { background: #f9fafc; border-top: 1px solid #eceef2; padding: 14px 16px 16px; }
 .dns-records-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; color: #8b93a7; }

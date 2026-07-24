@@ -1,3 +1,4 @@
+name: mail_justu
 # Auto-loaded by `docker compose up` alongside docker-compose.yml -- no -f
 # flags needed. Adds dev conveniences on top of the base stack:
 #   - host ports that shouldn't be open in production (e.g. raw MySQL)

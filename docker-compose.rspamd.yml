@@ -1,3 +1,4 @@
+name: mail_justu
 # Optional: spam filtering. Not required for a mail server to send/receive,
 # but without it nothing scores or rejects spam.
 #
@@ -15,7 +16,7 @@ services:
     container_name: mail-redis
     restart: unless-stopped
     networks:
-      - mail
+      - mail_justu_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -38,7 +39,7 @@ services:
       - ./volumes/rspamd:/etc/rspamd
       - rspamd_data:/var/lib/rspamd
     networks:
-      - mail
+      - mail_justu_network
 
 volumes:
   rspamd_data:

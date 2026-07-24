@@ -1,4 +1,6 @@
+import crypto from 'node:crypto'
 import { Router } from 'express'
+import multer from 'multer'
 import nodemailer from 'nodemailer'
 import { simpleParser } from 'mailparser'
 import { withImap, resolveFolder } from '../imap.js'
@@ -7,6 +9,11 @@ import { pool } from '../db.js'
 
 export const mailRouter = Router()
 mailRouter.use(requireSession)
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024, files: 10 },
+})
 
 const LIST_LIMIT = 30
 
@@ -193,7 +200,7 @@ mailRouter.delete('/messages/:uid', async (req, res) => {
   }
 })
 
-mailRouter.post('/send', async (req, res) => {
+mailRouter.post('/send', upload.array('attachments', 10), async (req, res) => {
   const { email, password } = req.mailSession
   const { to, cc, bcc, subject, body, from } = req.body || {}
   if (!to) return res.status(400).json({ error: 'to is required' })
@@ -205,42 +212,44 @@ mailRouter.post('/send', async (req, res) => {
     fromAddress = from
   }
 
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'mail_justu_postfix',
-    port: Number(process.env.SMTP_PORT) || 25,
-    secure: false,
-    tls: { rejectUnauthorized: false },
-  })
+  const mailOptions = {
+    from: fromAddress,
+    to,
+    cc: cc || undefined,
+    bcc: bcc || undefined,
+    subject: subject || '(no subject)',
+    text: body || '',
+    attachments: (req.files || []).map((f) => ({ filename: f.originalname, content: f.buffer, contentType: f.mimetype })),
+    messageId: `<${crypto.randomUUID()}@${fromAddress.split('@')[1]}>`,
+  }
 
   try {
-    const info = await transport.sendMail({
-      from: fromAddress,
-      to,
-      cc: cc || undefined,
-      bcc: bcc || undefined,
-      subject: subject || '(no subject)',
-      text: body || '',
+    // Compile once (no network I/O) so the exact same MIME source --
+    // attachments included -- both goes out over SMTP and gets saved to
+    // Sent, instead of building the message twice.
+    const compiler = nodemailer.createTransport({ streamTransport: true, buffer: true })
+    const { message: raw, messageId } = await compiler.sendMail(mailOptions)
+
+    const transport = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'mail_justu_postfix',
+      port: Number(process.env.SMTP_PORT) || 25,
+      secure: false,
+      tls: { rejectUnauthorized: false },
     })
+    const envelopeTo = [to, cc, bcc]
+      .filter(Boolean)
+      .join(',')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    await transport.sendMail({ envelope: { from: fromAddress, to: envelopeTo }, raw })
 
     await withImap(email, password, async (client) => {
       const sent = await resolveFolder(client, email, 'Sent')
-      const message = [
-        `From: ${fromAddress}`,
-        `To: ${to}`,
-        cc ? `Cc: ${cc}` : null,
-        bcc ? `Bcc: ${bcc}` : null,
-        `Subject: ${subject || '(no subject)'}`,
-        `Date: ${new Date().toUTCString()}`,
-        `Message-ID: ${info.messageId}`,
-        '',
-        body || '',
-      ]
-        .filter((line) => line !== null)
-        .join('\r\n')
-      await client.append(sent, message, ['\\Seen'])
+      await client.append(sent, raw, ['\\Seen'])
     }).catch(() => {})
 
-    res.json({ ok: true, messageId: info.messageId })
+    res.json({ ok: true, messageId })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

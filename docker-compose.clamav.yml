@@ -1,3 +1,4 @@
+name: mail_justu
 # Optional: antivirus scanning of inbound mail and attachments. Not required
 # to run a mail server.
 #
@@ -15,7 +16,7 @@ services:
     volumes:
       - clamav_db:/var/lib/clamav
     networks:
-      - mail
+      - mail_justu_network
 
 volumes:
   clamav_db:

@@ -2,32 +2,43 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api
 
 const TOKEN_KEY = 'webui_token'
 const EMAIL_KEY = 'webui_email'
+const ROLE_KEY = 'webui_role'
 
-export function getStoredSession(): { token: string; email: string } | null {
-  const token = localStorage.getItem(TOKEN_KEY)
-  const email = localStorage.getItem(EMAIL_KEY)
-  return token && email ? { token, email } : null
+export interface Session {
+  token: string
+  email: string
+  role: 'super' | 'domain' | 'user'
 }
 
-function setSession(token: string, email: string) {
+export function getStoredSession(): Session | null {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const email = localStorage.getItem(EMAIL_KEY)
+  const role = (localStorage.getItem(ROLE_KEY) as Session['role']) || 'user'
+  return token && email ? { token, email, role } : null
+}
+
+function setSession(token: string, email: string, role: string) {
   localStorage.setItem(TOKEN_KEY, token)
   localStorage.setItem(EMAIL_KEY, email)
+  localStorage.setItem(ROLE_KEY, role)
 }
 
 function clearSession() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(EMAIL_KEY)
+  localStorage.removeItem(ROLE_KEY)
 }
 
 class ApiError extends Error {}
 
 async function apiFetch(path: string, options: RequestInit = {}) {
   const session = getStoredSession()
+  const isFormData = options.body instanceof FormData
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...options.headers,
     },
   })
@@ -44,8 +55,8 @@ async function apiFetch(path: string, options: RequestInit = {}) {
 
 export async function login(email: string, password: string) {
   const data = await apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-  setSession(data.token, data.email)
-  return data.email as string
+  setSession(data.token, data.email, data.role)
+  return data as { token: string; email: string; role: Session['role']; domain: string }
 }
 
 export async function logout() {
@@ -117,8 +128,24 @@ export function deleteMessage(uid: number, folder: string) {
   return apiFetch(`/mail/messages/${uid}?folder=${encodeURIComponent(folder)}`, { method: 'DELETE' })
 }
 
-export function sendMail(opts: { to: string; cc?: string; bcc?: string; subject: string; body: string; from?: string }) {
-  return apiFetch('/mail/send', { method: 'POST', body: JSON.stringify(opts) })
+export function sendMail(opts: {
+  to: string
+  cc?: string
+  bcc?: string
+  subject: string
+  body: string
+  from?: string
+  attachments?: File[]
+}) {
+  const form = new FormData()
+  form.set('to', opts.to)
+  if (opts.cc) form.set('cc', opts.cc)
+  if (opts.bcc) form.set('bcc', opts.bcc)
+  form.set('subject', opts.subject)
+  form.set('body', opts.body)
+  if (opts.from) form.set('from', opts.from)
+  for (const file of opts.attachments || []) form.append('attachments', file)
+  return apiFetch('/mail/send', { method: 'POST', body: form })
 }
 
 export interface ApiAlias {

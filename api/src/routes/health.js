@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import net from 'node:net'
-import { requireAdmin } from '../middleware/auth.js'
+import { requireSuperAdmin } from '../middleware/auth.js'
 
 export const healthRouter = Router()
-healthRouter.use(requireAdmin)
+// Domain admins never see background services -- super admin only.
+healthRouter.use(requireSuperAdmin)
 
 // Hostnames come from env so renaming a service in docker-compose.yml
 // (and the corresponding .env file) is the only place that needs to change.

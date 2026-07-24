@@ -42,6 +42,14 @@ export async function migrate() {
     await conn.query('ALTER TABLE virtual_domains ADD COLUMN max_aliases_per_mailbox INT NULL').catch((err) => {
       if (err.code !== 'ER_DUP_FIELDNAME') throw err
     })
+    // Upgrade path for mailboxes created before per-domain admins existed.
+    await conn.query('ALTER TABLE virtual_users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE').catch((err) => {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err
+    })
+    // Upgrade path for domains created before storage quotas existed.
+    await conn.query('ALTER TABLE virtual_domains ADD COLUMN quota_mb INT NULL').catch((err) => {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err
+    })
   } finally {
     conn.release()
   }

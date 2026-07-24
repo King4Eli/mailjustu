@@ -33,6 +33,7 @@ function toFolderInfo(f: ApiFolder): FolderInfo {
 
 export default function App() {
   const [email, setEmail] = useState<string | null>(() => api.getStoredSession()?.email ?? null)
+  const [role, setRole] = useState<'super' | 'domain' | 'user'>(() => api.getStoredSession()?.role ?? 'user')
   const [folders, setFolders] = useState<FolderInfo[]>([])
   const [activeFolder, setActiveFolder] = useState('INBOX')
   const [messages, setMessages] = useState<EmailMessage[]>([])
@@ -119,8 +120,9 @@ export default function App() {
   if (!email) {
     return (
       <Login
-        onLogin={(loggedInEmail) => {
+        onLogin={(loggedInEmail, loggedInRole) => {
           setEmail(loggedInEmail)
+          setRole(loggedInRole)
         }}
       />
     )
@@ -281,6 +283,7 @@ export default function App() {
         subject: draft.subject,
         body: draft.body,
         from: draft.from,
+        attachments: draft.attachments,
       })
       setComposeDraft(null)
       loadFolders()
@@ -293,6 +296,7 @@ export default function App() {
   async function handleLogout() {
     await api.logout()
     setEmail(null)
+    setRole('user')
     setFolders([])
     setMessages([])
     setSelectedId(null)
@@ -318,6 +322,7 @@ export default function App() {
         onCreateFolder={createFolder}
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
+        adminUrl={role !== 'user' ? import.meta.env.VITE_ADMIN_URL : undefined}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

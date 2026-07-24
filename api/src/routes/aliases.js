@@ -19,8 +19,14 @@ aliasesRouter.post('/', async (req, res) => {
   const { alias } = req.body || {}
   const match = /^([^@\s]+)@([^@\s]+)$/.exec((alias || '').trim().toLowerCase())
   if (!match) return res.status(400).json({ error: 'alias must look like user@domain' })
-  const [source, domain] = [match[0], match[2]]
+  const [source, , domain] = match
   if (source === email) return res.status(400).json({ error: 'That is already your primary address' })
+
+  // Aliases can only be created on your own domain -- not "anything".
+  const ownDomain = email.split('@')[1]
+  if (domain !== ownDomain) {
+    return res.status(403).json({ error: `Aliases must be on your own domain (${ownDomain})` })
+  }
 
   const conn = await pool.getConnection()
   try {
@@ -31,13 +37,11 @@ aliasesRouter.post('/', async (req, res) => {
       return res.status(409).json({ error: 'That address is already a mailbox, not available as an alias' })
     }
 
-    // The limit follows the owning mailbox's domain, not the alias's domain.
-    const ownDomain = email.split('@')[1]
-    const [[ownDomainRow]] = await conn.query(
-      'SELECT max_aliases_per_mailbox FROM virtual_domains WHERE name = ?',
+    const [[domainRow]] = await conn.query(
+      'SELECT id, max_aliases_per_mailbox FROM virtual_domains WHERE name = ?',
       [ownDomain],
     )
-    const limit = ownDomainRow?.max_aliases_per_mailbox ?? Number(process.env.MAX_ALIASES_PER_MAILBOX) ?? null
+    const limit = domainRow.max_aliases_per_mailbox ?? Number(process.env.MAX_ALIASES_PER_MAILBOX) ?? null
     if (limit) {
       const [[{ count }]] = await conn.query(
         'SELECT COUNT(*) AS count FROM virtual_aliases WHERE destination = ?',
@@ -49,8 +53,6 @@ aliasesRouter.post('/', async (req, res) => {
       }
     }
 
-    await conn.query('INSERT IGNORE INTO virtual_domains (name) VALUES (?)', [domain])
-    const [[domainRow]] = await conn.query('SELECT id FROM virtual_domains WHERE name = ?', [domain])
     const [result] = await conn.query(
       'INSERT INTO virtual_aliases (domain_id, source, destination) VALUES (?, ?, ?)',
       [domainRow.id, source, email],

@@ -11,6 +11,7 @@ import {
   LogOut,
   Plus,
   AtSign,
+  ShieldCheck,
 } from 'lucide-react'
 import type { FolderInfo } from '../types'
 
@@ -36,6 +37,7 @@ interface SidebarProps {
   onCreateFolder: (name: string) => void
   onDeleteFolder: (path: string) => void
   onOpenAliases: () => void
+  adminUrl?: string
 }
 
 export function Sidebar({
@@ -50,6 +52,7 @@ export function Sidebar({
   onCreateFolder,
   onDeleteFolder,
   onOpenAliases,
+  adminUrl,
 }: SidebarProps) {
   function handleNewFolder() {
     const name = window.prompt('New folder name')
@@ -170,6 +173,18 @@ export function Sidebar({
             <AtSign size={15} />
             <span>Manage aliases</span>
           </button>
+          {adminUrl && (
+            <a
+              href={adminUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
+              style={{ color: 'var(--accent)' }}
+            >
+              <ShieldCheck size={15} />
+              <span>Open admin dashboard</span>
+            </a>
+          )}
           <div className="flex items-center gap-2 text-xs">
             <span className="flex-1 truncate" style={{ color: 'var(--text-faint)' }} title={email}>
               {email}

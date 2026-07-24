@@ -52,18 +52,64 @@ directly by Postfix (`mysql:` maps) and Dovecot (SQL passdb) -- so a
 mailbox created through the admin dashboard (or the API) can immediately
 send, receive, and log in over real SMTP/IMAP. The `api/` container
 applies `schema.sql` on startup (idempotent), so there's no manual
-migration step.
+migration step. Each mailbox also gets a real, Dovecot-enforced storage
+quota (`quota_mb`, per-domain, see below).
 
-Create one from the command line:
+Mailboxes are managed through the admin dashboard's "Mailboxes" tab, or
+directly via the API once you're logged in as an admin:
 
 ```bash
-curl -X POST http://localhost:4000/api/admin/mailboxes \
-  -H "Authorization: Bearer $(grep ^ADMIN_TOKEN .env/api.env | cut -d= -f2)" \
+TOKEN=$(curl -s -X POST http://localhost:4000/api/auth/login \
   -H "Content-Type: application/json" \
+  -d '{"email":"admin@mail.example.com","password":"..."}' | jq -r .token)
+
+curl -X POST http://localhost:4000/api/admin/mailboxes \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"email":"you@mail.example.com","password":"..."}'
 ```
 
-or through the admin dashboard's "Mailboxes" tab.
+### Admin access is real login, not a shared secret
+
+There's no static admin token. Signing into the admin dashboard is the
+same IMAP-backed login as webUI; what you get access to depends on the
+account:
+
+- **Super admin** -- email listed in `./.env/api.env`'s
+  `SUPER_ADMIN_EMAILS`. Full access: every domain, mailbox, and alias,
+  plus Services/health/stats. Bootstrapping the first one has no
+  self-serve flow (there's nobody to authorize it yet) -- insert it
+  directly into `virtual_users` the first time, see
+  `.test.credentials.txt` for how the seeded `admin@mail.example.com` was
+  created.
+- **Domain admin** -- a mailbox with `virtual_users.is_admin = true`
+  (set by a super admin, from the Mailboxes tab or `PATCH
+  /api/admin/mailboxes/:id`). Scoped to their own domain only --
+  mailboxes, aliases, and domain limits for that one domain -- and never
+  sees Services/health/stats.
+- Anyone else gets 401 on every `/api/admin/*` route.
+
+webUI shows an "Open admin dashboard" link automatically for accounts
+that have either role.
+
+### Aliases are self-service, domain-scoped
+
+Any logged-in webUI user can create their own aliases ("Manage aliases"
+in the sidebar) -- mail to the alias lands in their inbox, and Compose
+lets them send *as* the alias. Aliases must be on the user's own domain
+(`jordan@mail.example.com` can only create `whatever@mail.example.com`,
+not another domain) -- that restriction is independent of admin role,
+since it's a personal self-service feature, not an admin one.
+
+### Per-domain limits + DNS records
+
+The admin dashboard's Domains tab sets, per domain: max mailboxes, max
+aliases per mailbox, and a storage quota (MB) per mailbox -- each falls
+back to a global default in `./.env/api.env`
+(`MAX_MAILBOXES_PER_DOMAIN`/`MAX_ALIASES_PER_MAILBOX`/`DEFAULT_MAILBOX_QUOTA_MB`)
+when left unset. It also generates copy-pasteable MX/A/SPF/DMARC records
+for the domain (DKIM is flagged as unavailable -- see Known follow-ups).
+Only super admins can create/delete domains; domain admins can edit
+limits for their own domain.
 
 ## Environment
 
@@ -71,10 +117,6 @@ Each component's configuration lives in its own file under `./.env/`
 (`mysql.env`, `postfix.env`, `rspamd.env`, `api.env`, `admin.env`,
 `webui.env`, ...) rather than one shared `.env`. Update the passwords in
 there before any real deployment -- the checked-in values are placeholders.
-
-`./.env/api.env`'s `ADMIN_TOKEN` gates the admin dashboard and the
-`/api/admin/*` routes -- it's a shared secret typed into the dashboard's
-token screen, never baked into the built frontend JS.
 
 ## Frontends
 
@@ -90,14 +132,18 @@ through `api/` (`:4000`).
 
 ## api/
 
-Express server, no ORM. `src/routes/auth.js` verifies webmail logins by
-actually connecting to Dovecot over IMAP; `src/routes/mail.js` proxies
-folders/messages/send/flags/move/delete over IMAP (imapflow) and SMTP
-(nodemailer); `src/routes/mailboxes.js` is the admin-only mailbox CRUD
-against MySQL; `src/routes/health.js` does a live TCP check against each
-container; `src/routes/stats.js` proxies Rspamd's real controller stats.
-Webmail sessions are an in-memory token -> {email, password} map with a
-TTL (`SESSION_TTL_MINUTES`), not JWTs -- simple, and the password never
+Express server, no ORM. `src/routes/auth.js` verifies logins by actually
+connecting to Dovecot over IMAP, then resolves a role (super/domain/user)
+from `SUPER_ADMIN_EMAILS` + `virtual_users.is_admin` and stores it on the
+session; `src/routes/mail.js` proxies folders/messages/send (with
+attachments, via `multer`)/flags/move/delete over IMAP (imapflow) and SMTP
+(nodemailer); `src/routes/aliases.js` is the self-service, domain-scoped
+alias CRUD; `src/routes/mailboxes.js` and `src/routes/domains.js` are
+role-scoped admin CRUD against MySQL; `src/routes/health.js` and
+`src/routes/stats.js` (super-admin only) do live TCP checks and proxy
+Rspamd's real controller stats. Webmail/admin sessions are an in-memory
+token -> {email, password, role, domain} map with a TTL
+(`SESSION_TTL_MINUTES`), not JWTs -- simple, and the password never
 touches the browser after login.
 
 ## Backing up / restoring
@@ -116,10 +162,13 @@ secret, same as the `.env/` files.
 
 ## Known follow-ups
 
+See `.todo.txt` for the full, organized list. Highlights:
+
 - OpenDKIM ships in verify-only mode. Signing needs real per-domain keys
   and matching DNS TXT records, which only make sense for an owned domain.
-- Admin's "Mail activity", "Mail queue", "Security", and "Storage" tabs
-  are still placeholders -- they'd need Postfix queue introspection and
-  log parsing (queue access means either mounting the Docker socket or
-  adding a small in-container helper; neither is wired up yet).
-- No quota/storage enforcement per mailbox.
+- Admin's "Mail activity", "Mail queue", and "Security" views don't exist
+  yet -- they'd need Postfix queue introspection and log parsing (queue
+  access means either mounting the Docker socket or adding a small
+  in-container helper; neither is wired up).
+- Received attachments show name/size but there's no download endpoint
+  yet -- only the compose-time upload path is wired up.

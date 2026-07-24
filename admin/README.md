@@ -1,8 +1,13 @@
 # Postmaster Admin
 
-A responsive React dashboard for the mail server Compose stack: live service health (real TCP checks), real Rspamd stats, and mailbox management. Talks to `../api/` -- nothing here reaches Docker or the mail stack directly.
+A responsive React dashboard for the mail server Compose stack: live service health (real TCP checks), real Rspamd stats, mailbox/domain management, and per-domain limits. Talks to `../api/` -- nothing here reaches Docker or the mail stack directly.
 
-On load it asks for the API's `ADMIN_TOKEN` (see `../.env/api.env`) and keeps it in memory/localStorage; it's never bundled into the built JS, unlike `VITE_`-prefixed values.
+Sign-in is a real mailbox login (same IMAP-backed check as webUI), not a shared secret. What you get access to depends on the account:
+- Listed in `../.env/api.env`'s `SUPER_ADMIN_EMAILS` -> full access: every domain/mailbox/alias, plus Services/health/stats.
+- `virtual_users.is_admin` set for that mailbox -> domain admin: scoped to that one domain, Services/health/stats hidden entirely.
+- Anything else -> rejected, no admin access.
+
+See `../.test.credentials.txt` for the seeded super-admin and domain-admin test accounts.
 
 ## Run locally
 

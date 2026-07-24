@@ -3,11 +3,13 @@ Not urgent for local dev -- but don't assume any of this "just works" beyond
 localhost.
 
 ## Needs a real, owned domain + DNS
-- OpenDKIM ships in verify-only mode (Mode "v" in ./volumes/opendkim). To
-  actually sign outbound mail: generate a keypair, publish the
-  <selector>._domainkey.<domain> TXT record, then switch Mode to "sv" and
-  add KeyTable/SigningTable entries. Can't be done against
-  mail.example.com.
+- OpenDKIM now signs + verifies (Mode "sv", selector "mail", keypair under
+  ./volumes/opendkim/keys, KeyTable/SigningTable/TrustedHosts in
+  ./volumes/opendkim/conf.d) -- confirmed working end to end, outbound
+  mail carries a valid DKIM-Signature. What's still outstanding is
+  publishing the real <selector>._domainkey.<domain> TXT record (see
+  ./volumes/opendkim/keys/mail.txt for the record content) -- can't be
+  done against the placeholder mail.example.com, needs a real domain.
 - The admin dashboard's Domains tab generates MX/A/SPF/DMARC records per
   domain, but MAIL_HOSTNAME/MAIL_PUBLIC_IP in ./.env/api.env are still
   placeholders -- set them to your real hostname/IP or the records it
@@ -27,7 +29,6 @@ localhost.
 - Mail activity / security event feeds: same story, need log
   parsing/aggregation (Postfix logs to syslog inside its container, not
   currently shipped anywhere api/ can read).
-- No per-mailbox storage quota or disk usage reporting.
 - ClamAV runs standalone -- it's not wired into Postfix's content_filter,
   so nothing is actually scanned yet. Needs a milter/filter integration
   decision (clamav-milter vs content_filter).
@@ -35,6 +36,20 @@ localhost.
   activity, Mail queue, Security, Storage, Settings, notifications bell,
   "Documentation" link, the fake "Alex Kim" profile) rather than leave
   dead UI in front of you -- add them back once the above are real.
+
+## RBAC (super admin / domain admin / user) -- how it actually works
+- There's no self-serve "first admin" signup. The seeded
+  admin@mail.example.com super admin was created with a direct SQL insert
+  (see .test.credentials.txt) since /api/admin/mailboxes itself requires
+  an admin session -- chicken/egg for the very first one. Document (or
+  script) this bootstrap step before handing this off to someone else.
+- Only super admins can grant/revoke is_admin (PATCH
+  /api/admin/mailboxes/:id) or create/delete domains. A domain admin
+  cannot promote a co-admin on their own domain -- by design, to avoid an
+  easy privilege-escalation loop, but worth revisiting if that's too
+  restrictive in practice.
+- Domain admins can still be deleted (including by themselves) with no
+  "don't lock yourself out" guard.
 
 ## Cleanup / consistency, not urgent
 - ./.env/mysql.env and the old dedicated-mysql setup are unused now that
@@ -45,6 +60,11 @@ localhost.
   ./volumes/dovecot/conf.d/auth-sql.conf hardcode the global_mysql
   credentials (mysql: map files don't support env expansion) -- if you
   rotate mail_justu_password1, update both places plus ./.env/api.env.
+- The 1024M fallback quota is hardcoded in both
+  ./volumes/dovecot/conf.d/auth-sql.conf's query and quota.conf, and
+  mirrored in ./.env/api.env's DEFAULT_MAILBOX_QUOTA_MB purely for the
+  admin dashboard's display -- same "duplicated because config can't read
+  env" situation as the DB credentials above. Keep all three in sync.
 - shared-global-network is `external: true` -- this compose file will
   refuse to start on a machine that doesn't already have that network
   created by whatever else manages it. Not portable as-is.
@@ -56,19 +76,32 @@ localhost.
   (curl + a couple of throwaway Puppeteer scripts).
 
 ## Known limitations, probably fine to leave
-- Webmail sessions are an in-memory token->credential map in api/ (see
-  api/src/middleware/auth.js) -- restarting the api container logs
-  everyone out, and it doesn't scale past one api replica.
+- Webmail/admin sessions are an in-memory token->{email,password,role,
+  domain} map in api/ (see api/src/middleware/auth.js) -- restarting the
+  api container logs everyone out, and it doesn't scale past one api
+  replica.
 - No password reset / account self-service flow -- mailbox creation is
   admin-only via the dashboard or POST /api/admin/mailboxes.
 - Aliases only forward to a mailbox on this server (virtual_aliases.
   destination must be a real local mailbox) -- no forwarding to external
-  addresses.
-- MAX_MAILBOXES_PER_DOMAIN / MAX_ALIASES_PER_MAILBOX (and their per-domain
-  overrides, set via the admin Domains tab) are only checked when creating
-  a new mailbox/alias -- lowering a limit doesn't retroactively remove
-  anything already over it.
+  addresses. They're also locked to the owning mailbox's own domain (see
+  README) -- that's intentional, not a bug.
+- MAX_MAILBOXES_PER_DOMAIN / MAX_ALIASES_PER_MAILBOX / quota_mb (and their
+  per-domain overrides, set via the admin Domains tab) are only checked
+  when creating a new mailbox/alias -- lowering a limit doesn't
+  retroactively remove anything already over it (storage quota is the
+  exception: Dovecot enforces that live, so a mailbox already over a
+  newly-lowered quota just can't accept new mail until it's under again).
 - Custom IMAP folders (webUI's "New folder") have no count limit.
+- File uploads: compose-time attachments work end to end (multer on the
+  API, real MIME attachments via nodemailer, saved to Sent too). There's
+  no size/type restriction beyond multer's 25 MB-per-file/10-files caps,
+  and no per-mailbox aggregate attachment quota beyond the mailbox's
+  overall storage quota. Receiving attachments works (parsed via
+  mailparser, name+size shown) but there's no download endpoint yet.
+- No per-mailbox storage USAGE reporting (quota is enforced, but nothing
+  surfaces "X of Y MB used" in the admin dashboard) -- would need
+  `doveadm quota get` piped through api/.
 - Rspamd's {= env.X =} config templating only resolves a handful of names
   baked into its own default rspamd.conf; custom env vars silently fall
   back to defaults instead of erroring. See the comment in

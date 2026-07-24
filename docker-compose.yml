@@ -26,7 +26,7 @@ services:
       - "465:465"
       - "587:587"
     networks:
-      - mail
+      - mail_justu_network
       - shared-global-network
 
   # Serves stored mailboxes over IMAP, including encrypted IMAPS access.
@@ -43,7 +43,7 @@ services:
       - "143:31143"
       - "993:31993"
     networks:
-      - mail
+      - mail_justu_network
       - shared-global-network
 
   # Backend for admin/ and webUI/: mailbox management, IMAP/SMTP for
@@ -67,11 +67,11 @@ services:
     ports:
       - "4000:4000"
     networks:
-      - mail
+      - mail_justu_network
       - shared-global-network
 
 networks:
-  mail:
+  mail_justu_network:
     driver: bridge
   shared-global-network:
     external: true

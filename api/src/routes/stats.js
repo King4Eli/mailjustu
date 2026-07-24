@@ -1,9 +1,12 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { requireAdmin } from '../middleware/auth.js'
+import { requireSuperAdmin } from '../middleware/auth.js'
 
 export const statsRouter = Router()
-statsRouter.use(requireAdmin)
+// Domain admins never see background services -- super admin only. Their
+// own mailbox/alias counts are already visible via the scoped
+// /admin/mailboxes and /admin/domains responses.
+statsRouter.use(requireSuperAdmin)
 
 statsRouter.get('/', async (req, res) => {
   const [[{ mailboxCount }]] = await pool.query('SELECT COUNT(*) AS mailboxCount FROM virtual_users')

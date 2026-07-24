@@ -8,6 +8,7 @@ import {
   Globe,
   Inbox,
   LayoutDashboard,
+  LogOut,
   Mail,
   Menu,
   Plus,
@@ -71,8 +72,9 @@ function StatCard({ icon: Icon, label, value, tone, note }) {
   )
 }
 
-function TokenGate({ onAuthorized }) {
-  const [token, setToken] = useState('')
+function Login({ onAuthorized }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -80,13 +82,11 @@ function TokenGate({ onAuthorized }) {
     e.preventDefault()
     setError('')
     setLoading(true)
-    api.setStoredToken(token.trim())
     try {
-      await api.getHealth()
-      onAuthorized()
-    } catch {
-      api.clearStoredToken()
-      setError('That token was rejected. Check ../.env/api.env ADMIN_TOKEN.')
+      const session = await api.login(email.trim(), password)
+      onAuthorized(session)
+    } catch (err) {
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -99,27 +99,41 @@ function TokenGate({ onAuthorized }) {
           <div className="brand-mark"><Mail size={20} /></div>
           <span>{config.title}</span>
         </div>
-        <label className="token-label">Admin token</label>
+        <label className="token-label">Email</label>
         <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="ADMIN_TOKEN from .env/api.env"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="admin@mail.example.com"
           className="token-input"
           autoFocus
+          required
+        />
+        <label className="token-label">Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          className="token-input"
+          required
         />
         {error && <p className="token-error">{error}</p>}
         <button type="submit" className="refresh" style={{ width: '100%', justifyContent: 'center' }} disabled={loading}>
-          {loading ? 'Checking…' : 'Continue'}
+          {loading ? 'Signing in…' : 'Sign in'}
         </button>
+        <p className="token-hint">
+          Needs a mailbox that's either listed in SUPER_ADMIN_EMAILS or has is_admin set for its domain.
+        </p>
       </form>
     </div>
   )
 }
 
-function MailboxesPanel({ mailboxes, onCreate, onDelete }) {
+function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -128,9 +142,10 @@ function MailboxesPanel({ mailboxes, onCreate, onDelete }) {
     setError('')
     setBusy(true)
     try {
-      await onCreate(email.trim(), password)
+      await onCreate(email.trim(), password, isAdmin)
       setEmail('')
       setPassword('')
+      setIsAdmin(false)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -159,6 +174,12 @@ function MailboxesPanel({ mailboxes, onCreate, onDelete }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+        {isSuper && (
+          <label className="admin-checkbox">
+            <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
+            Domain admin
+          </label>
+        )}
         <button type="submit" className="refresh" disabled={busy}>
           <Plus size={16} /> {busy ? 'Creating…' : 'Create mailbox'}
         </button>
@@ -166,11 +187,22 @@ function MailboxesPanel({ mailboxes, onCreate, onDelete }) {
       {error && <p className="token-error">{error}</p>}
 
       <div className="service-table" style={{ marginTop: 20 }}>
-        <div className="service-row table-head"><span>EMAIL</span><span>CREATED</span><span /></div>
+        <div className="service-row table-head" style={{ gridTemplateColumns: isSuper ? '2fr 1fr .8fr 32px' : '2fr 1fr 32px' }}>
+          <span>EMAIL</span><span>CREATED</span>{isSuper && <span>ADMIN</span>}<span />
+        </div>
         {mailboxes.map((mailbox) => (
-          <div className="service-row" key={mailbox.id} style={{ gridTemplateColumns: '2fr 1fr 32px' }}>
+          <div className="service-row" key={mailbox.id} style={{ gridTemplateColumns: isSuper ? '2fr 1fr .8fr 32px' : '2fr 1fr 32px' }}>
             <span>{mailbox.email}</span>
             <span>{new Date(mailbox.created_at).toLocaleDateString()}</span>
+            {isSuper && (
+              <button
+                className={mailbox.is_admin ? 'admin-badge on' : 'admin-badge'}
+                onClick={() => onSetAdmin(mailbox.id, !mailbox.is_admin)}
+                title={mailbox.is_admin ? 'Revoke domain admin' : 'Grant domain admin'}
+              >
+                {mailbox.is_admin ? 'Admin' : '—'}
+              </button>
+            )}
             <button className="row-menu" onClick={() => onDelete(mailbox.id)} aria-label={`Delete ${mailbox.email}`}>
               <Trash2 size={16} />
             </button>
@@ -213,10 +245,11 @@ function DnsRecords({ records }) {
   )
 }
 
-function DomainsPanel({ domains, defaults, onCreate, onDelete }) {
+function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete }) {
   const [name, setName] = useState('')
   const [maxMailboxes, setMaxMailboxes] = useState('')
   const [maxAliases, setMaxAliases] = useState('')
+  const [quotaMb, setQuotaMb] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState(null)
@@ -226,10 +259,11 @@ function DomainsPanel({ domains, defaults, onCreate, onDelete }) {
     setError('')
     setBusy(true)
     try {
-      await onCreate(name.trim(), maxMailboxes, maxAliases)
+      await onCreate(name.trim(), maxMailboxes, maxAliases, quotaMb)
       setName('')
       setMaxMailboxes('')
       setMaxAliases('')
+      setQuotaMb('')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -240,67 +274,86 @@ function DomainsPanel({ domains, defaults, onCreate, onDelete }) {
   return (
     <section className="panel services-panel">
       <div className="panel-head">
-        <div><h2>Domains</h2><p>Domains this server accepts mail for, with per-domain mailbox/alias limits</p></div>
+        <div><h2>Domains</h2><p>Domains this server accepts mail for, with per-domain mailbox/alias/storage limits</p></div>
       </div>
 
-      <form onSubmit={handleCreate} className="mailbox-form">
-        <input type="text" required placeholder="newdomain.com" value={name} onChange={(e) => setName(e.target.value)} />
-        <input
-          type="number"
-          min="0"
-          placeholder={`Max mailboxes (default ${defaults?.maxMailboxesPerDomain ?? '∞'})`}
-          value={maxMailboxes}
-          onChange={(e) => setMaxMailboxes(e.target.value)}
-          style={{ maxWidth: 220 }}
-        />
-        <input
-          type="number"
-          min="0"
-          placeholder={`Max aliases/mailbox (default ${defaults?.maxAliasesPerMailbox ?? '∞'})`}
-          value={maxAliases}
-          onChange={(e) => setMaxAliases(e.target.value)}
-          style={{ maxWidth: 220 }}
-        />
-        <button type="submit" className="refresh" disabled={busy}>
-          <Plus size={16} /> {busy ? 'Adding…' : 'Add domain'}
-        </button>
-      </form>
+      {isSuper && (
+        <form onSubmit={handleCreate} className="mailbox-form">
+          <input type="text" required placeholder="newdomain.com" value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            type="number"
+            min="0"
+            placeholder={`Max mailboxes (default ${defaults?.maxMailboxesPerDomain ?? '∞'})`}
+            value={maxMailboxes}
+            onChange={(e) => setMaxMailboxes(e.target.value)}
+            style={{ maxWidth: 190 }}
+          />
+          <input
+            type="number"
+            min="0"
+            placeholder={`Max aliases/mailbox (default ${defaults?.maxAliasesPerMailbox ?? '∞'})`}
+            value={maxAliases}
+            onChange={(e) => setMaxAliases(e.target.value)}
+            style={{ maxWidth: 190 }}
+          />
+          <input
+            type="number"
+            min="0"
+            placeholder={`Quota MB/mailbox (default ${defaults?.quotaMb ?? '∞'})`}
+            value={quotaMb}
+            onChange={(e) => setQuotaMb(e.target.value)}
+            style={{ maxWidth: 190 }}
+          />
+          <button type="submit" className="refresh" disabled={busy}>
+            <Plus size={16} /> {busy ? 'Adding…' : 'Add domain'}
+          </button>
+        </form>
+      )}
       {error && <p className="token-error">{error}</p>}
 
       <div className="service-table" style={{ marginTop: 20 }}>
-        <div className="service-row table-head" style={{ gridTemplateColumns: '1.5fr .7fr .9fr .9fr 32px' }}>
-          <span>DOMAIN</span><span>MAILBOXES</span><span>MAILBOX LIMIT</span><span>ALIAS LIMIT</span><span />
+        <div className="service-row table-head" style={{ gridTemplateColumns: '1.3fr .6fr .8fr .8fr .8fr 32px' }}>
+          <span>DOMAIN</span><span>MAILBOXES</span><span>MAILBOX LIMIT</span><span>ALIAS LIMIT</span><span>QUOTA</span><span />
         </div>
         {domains.map((domain) => (
           <div key={domain.id}>
-            <div className="service-row" style={{ gridTemplateColumns: '1.5fr .7fr .9fr .9fr 32px', cursor: 'pointer' }} onClick={() => setExpanded(expanded === domain.id ? null : domain.id)}>
+            <div
+              className="service-row"
+              style={{ gridTemplateColumns: '1.3fr .6fr .8fr .8fr .8fr 32px', cursor: 'pointer' }}
+              onClick={() => setExpanded(expanded === domain.id ? null : domain.id)}
+            >
               <span>{domain.name}</span>
               <span>{domain.mailboxCount}</span>
               <span>{domain.max_mailboxes ?? `default (${defaults?.maxMailboxesPerDomain ?? '∞'})`}</span>
               <span>{domain.max_aliases_per_mailbox ?? `default (${defaults?.maxAliasesPerMailbox ?? '∞'})`}</span>
-              <button
-                className="row-menu"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (window.confirm(`Delete ${domain.name}? This also deletes all its mailboxes and aliases.`)) onDelete(domain.id)
-                }}
-                aria-label={`Delete ${domain.name}`}
-              >
-                <Trash2 size={16} />
-              </button>
+              <span>{domain.quota_mb ? `${domain.quota_mb} MB` : `default (${defaults?.quotaMb ?? '∞'})`}</span>
+              {isSuper ? (
+                <button
+                  className="row-menu"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (window.confirm(`Delete ${domain.name}? This also deletes all its mailboxes and aliases.`)) onDelete(domain.id)
+                  }}
+                  aria-label={`Delete ${domain.name}`}
+                >
+                  <Trash2 size={16} />
+                </button>
+              ) : (
+                <span />
+              )}
             </div>
             {expanded === domain.id && <DnsRecords records={domain.dnsRecords} />}
           </div>
         ))}
-        {domains.length === 0 && <div className="empty">No domains yet — add one above.</div>}
+        {domains.length === 0 && <div className="empty">No domains yet.</div>}
       </div>
     </section>
   )
 }
 
 function App() {
-  const [authorized, setAuthorized] = useState(false)
-  const [checkingToken, setCheckingToken] = useState(true)
+  const [session, setSession] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [active, setActive] = useState('Overview')
   const [query, setQuery] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -312,32 +365,26 @@ function App() {
   const [domainDefaults, setDomainDefaults] = useState(null)
   const [loadError, setLoadError] = useState('')
 
+  const isSuper = session?.role === 'super'
+
   useEffect(() => {
-    if (!api.getStoredToken()) {
-      setCheckingToken(false)
-      return
-    }
-    api
-      .getHealth()
-      .then(() => setAuthorized(true))
-      .catch(() => api.clearStoredToken())
-      .finally(() => setCheckingToken(false))
+    const stored = api.getStoredSession()
+    if (stored) setSession(stored)
+    setCheckingSession(false)
   }, [])
 
   async function refresh() {
     setLoadError('')
     try {
-      const [healthData, statsData, mailboxData, domainData] = await Promise.all([
-        api.getHealth(),
-        api.getStats(),
-        api.getMailboxes(),
-        api.getDomains(),
-      ])
-      setHealth(healthData)
-      setStats(statsData)
+      const [mailboxData, domainData] = await Promise.all([api.getMailboxes(), api.getDomains()])
       setMailboxes(mailboxData.mailboxes)
       setDomains(domainData.domains)
       setDomainDefaults(domainData.defaults)
+      if (isSuper) {
+        const [healthData, statsData] = await Promise.all([api.getHealth(), api.getStats()])
+        setHealth(healthData)
+        setStats(statsData)
+      }
       setLastUpdated(new Date().toLocaleTimeString())
     } catch (err) {
       setLoadError(err.message)
@@ -345,8 +392,9 @@ function App() {
   }
 
   useEffect(() => {
-    if (authorized) refresh()
-  }, [authorized])
+    if (session) refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
 
   const filteredServices = useMemo(
     () => (health?.services || []).filter((service) => service.name.toLowerCase().includes(query.toLowerCase())),
@@ -358,8 +406,13 @@ function App() {
     setSidebarOpen(false)
   }
 
-  async function handleCreateMailbox(email, password) {
-    await api.createMailbox(email, password)
+  async function handleCreateMailbox(email, password, isAdmin) {
+    await api.createMailbox(email, password, isAdmin)
+    await refresh()
+  }
+
+  async function handleSetMailboxAdmin(id, value) {
+    await api.setMailboxAdmin(id, value)
     await refresh()
   }
 
@@ -368,8 +421,8 @@ function App() {
     await refresh()
   }
 
-  async function handleCreateDomain(name, maxMailboxes, maxAliasesPerMailbox) {
-    await api.createDomain(name, maxMailboxes, maxAliasesPerMailbox)
+  async function handleCreateDomain(name, maxMailboxes, maxAliasesPerMailbox, quotaMb) {
+    await api.createDomain(name, maxMailboxes, maxAliasesPerMailbox, quotaMb)
     await refresh()
   }
 
@@ -378,8 +431,17 @@ function App() {
     await refresh()
   }
 
-  if (checkingToken) return null
-  if (!authorized) return <TokenGate onAuthorized={() => setAuthorized(true)} />
+  async function handleLogout() {
+    await api.logout()
+    setSession(null)
+    setHealth(null)
+    setStats(null)
+    setMailboxes([])
+    setDomains([])
+  }
+
+  if (checkingSession) return null
+  if (!session) return <Login onAuthorized={setSession} />
 
   const allHealthy = health && health.summary.requiredHealthy === health.summary.requiredTotal
 
@@ -394,10 +456,23 @@ function App() {
           <NavItem icon={Users} label="Mailboxes" count={mailboxes.length || null} active={active === 'Mailboxes'} onClick={() => navigate('Mailboxes')} />
           <NavItem icon={Globe} label="Domains" count={domains.length || null} active={active === 'Domains'} onClick={() => navigate('Domains')} />
         </nav>
-        <div className="workspace-label secondary">SYSTEM</div>
-        <nav>
-          <NavItem icon={Server} label="Services" active={active === 'Services'} onClick={() => navigate('Services')} />
-        </nav>
+        {isSuper && (
+          <>
+            <div className="workspace-label secondary">SYSTEM</div>
+            <nav>
+              <NavItem icon={Server} label="Services" active={active === 'Services'} onClick={() => navigate('Services')} />
+            </nav>
+          </>
+        )}
+        <div className="sidebar-bottom">
+          <div className="profile">
+            <div className="avatar">{session.email.slice(0, 2).toUpperCase()}</div>
+            <div><strong>{session.email}</strong><span>{isSuper ? 'Super admin' : `Admin · ${session.domain}`}</span></div>
+            <button onClick={handleLogout} title="Sign out" aria-label="Sign out" className="logout-button">
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
       </aside>
 
       {sidebarOpen && <button className="scrim" onClick={() => setSidebarOpen(false)} aria-label="Close menu" />}
@@ -406,9 +481,11 @@ function App() {
         <header className="topbar">
           <button className="menu-button" onClick={() => setSidebarOpen(true)}><Menu /></button>
           <div className="search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search services…" /></div>
-          <div className="top-actions">
-            <span className="server-select"><span className={`status-dot ${allHealthy ? '' : 'down'}`} /> {config.mailHost}</span>
-          </div>
+          {isSuper && (
+            <div className="top-actions">
+              <span className="server-select"><span className={`status-dot ${allHealthy ? '' : 'down'}`} /> {config.mailHost}</span>
+            </div>
+          )}
         </header>
 
         <div className="content">
@@ -424,7 +501,7 @@ function App() {
             </div>
           )}
 
-          {health && !loadError && (
+          {isSuper && health && !loadError && (
             <div className="health-banner" style={allHealthy ? undefined : { background: '#fef3d9', borderColor: '#f7e2ad' }}>
               <div className="health-check" style={allHealthy ? undefined : { background: '#b3790a' }}>
                 <Check size={19} />
@@ -437,7 +514,7 @@ function App() {
             </div>
           )}
 
-          {(active === 'Overview' || active === 'Services') && (
+          {isSuper && (active === 'Overview' || active === 'Services') && (
             <>
               <section className="stats-grid">
                 <StatCard icon={Users} label="Mailboxes" value={stats?.mailboxCount ?? '—'} tone="blue" note={`${stats?.domainCount ?? 0} domain(s)`} />
@@ -469,12 +546,28 @@ function App() {
             </>
           )}
 
+          {!isSuper && active === 'Overview' && (
+            <section className="panel services-panel">
+              <div className="panel-head"><div><h2>Your domain</h2><p>{session.domain}</p></div></div>
+              <div className="stats-grid">
+                <StatCard icon={Users} label="Mailboxes" value={mailboxes.length} tone="blue" note={session.domain} />
+                <StatCard icon={Globe} label="Aliases" value={domains[0]?.aliasCount ?? '—'} tone="violet" note={session.domain} />
+              </div>
+            </section>
+          )}
+
           {active === 'Mailboxes' && (
-            <MailboxesPanel mailboxes={mailboxes} onCreate={handleCreateMailbox} onDelete={handleDeleteMailbox} />
+            <MailboxesPanel
+              mailboxes={mailboxes}
+              isSuper={isSuper}
+              onCreate={handleCreateMailbox}
+              onDelete={handleDeleteMailbox}
+              onSetAdmin={handleSetMailboxAdmin}
+            />
           )}
 
           {active === 'Domains' && (
-            <DomainsPanel domains={domains} defaults={domainDefaults} onCreate={handleCreateDomain} onDelete={handleDeleteDomain} />
+            <DomainsPanel domains={domains} defaults={domainDefaults} isSuper={isSuper} onCreate={handleCreateDomain} onDelete={handleDeleteDomain} />
           )}
         </div>
       </main>

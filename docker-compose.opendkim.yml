@@ -1,3 +1,4 @@
+name: mail_justu
 # Optional: DKIM signing/verification. Improves deliverability and sender
 # trust but a mail server will send/receive fine without it.
 #
@@ -20,4 +21,4 @@ services:
     volumes:
       - ./volumes/opendkim:/etc/opendkim
     networks:
-      - mail
+      - mail_justu_network

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { X, Minus, Paperclip, Send, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Minus, Paperclip, Send, ChevronDown, File as FileIcon } from 'lucide-react'
 
 export interface ComposeDraft {
   to: string
@@ -8,6 +8,7 @@ export interface ComposeDraft {
   subject: string
   body: string
   from?: string
+  attachments?: File[]
 }
 
 interface ComposeModalProps {
@@ -18,16 +19,42 @@ interface ComposeModalProps {
   aliases: string[]
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function ComposeModal({ initialDraft, onClose, onSend, primaryEmail, aliases }: ComposeModalProps) {
-  const [draft, setDraft] = useState<ComposeDraft>({ from: primaryEmail, ...initialDraft })
+  const [draft, setDraft] = useState<ComposeDraft>({ from: primaryEmail, attachments: [], ...initialDraft })
   const [minimized, setMinimized] = useState(false)
   const [showCc, setShowCc] = useState(Boolean(initialDraft.cc || initialDraft.bcc))
+  const [sending, setSending] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setDraft({ from: primaryEmail, ...initialDraft })
+    setDraft({ from: primaryEmail, attachments: [], ...initialDraft })
     setShowCc(Boolean(initialDraft.cc || initialDraft.bcc))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDraft])
+
+  function addFiles(files: FileList | null) {
+    if (!files) return
+    setDraft((d) => ({ ...d, attachments: [...(d.attachments || []), ...Array.from(files)] }))
+  }
+
+  function removeFile(index: number) {
+    setDraft((d) => ({ ...d, attachments: (d.attachments || []).filter((_, i) => i !== index) }))
+  }
+
+  async function handleSend() {
+    setSending(true)
+    try {
+      await onSend(draft)
+    } finally {
+      setSending(false)
+    }
+  }
 
   if (minimized) {
     return (
@@ -142,22 +169,57 @@ export function ComposeModal({ initialDraft, onClose, onSend, primaryEmail, alia
         onChange={(e) => setDraft({ ...draft, body: e.target.value })}
         placeholder="Write your message..."
         className="flex-1 resize-none px-4 py-3 text-sm outline-none"
-        style={{ color: 'var(--text)', background: 'transparent', minHeight: '180px' }}
+        style={{ color: 'var(--text)', background: 'transparent', minHeight: '140px' }}
       />
+
+      {(draft.attachments?.length || 0) > 0 && (
+        <div className="flex flex-wrap gap-2 border-t px-4 py-3" style={{ borderColor: 'var(--border)' }}>
+          {draft.attachments!.map((file, i) => (
+            <div
+              key={`${file.name}-${i}`}
+              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+            >
+              <FileIcon size={13} />
+              <span className="max-w-[140px] truncate">{file.name}</span>
+              <span style={{ color: 'var(--text-faint)' }}>{formatSize(file.size)}</span>
+              <button onClick={() => removeFile(i)} style={{ color: 'var(--text-faint)' }}>
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div
         className="flex items-center justify-between border-t px-4 py-3"
         style={{ borderColor: 'var(--border)' }}
       >
         <button
-          onClick={() => onSend(draft)}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+          onClick={handleSend}
+          disabled={sending}
+          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
           style={{ background: 'var(--accent)' }}
         >
-          Send
+          {sending ? 'Sending…' : 'Send'}
           <Send size={14} />
         </button>
-        <button style={{ color: 'var(--text-faint)' }} className="rounded-lg p-2 hover:opacity-80">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            addFiles(e.target.files)
+            e.target.value = ''
+          }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{ color: 'var(--text-faint)' }}
+          className="rounded-lg p-2 hover:opacity-80"
+          title="Attach files"
+        >
           <Paperclip size={17} />
         </button>
       </div>

@@ -3,7 +3,7 @@ import { Mail } from 'lucide-react'
 import { login } from '../api'
 
 interface LoginProps {
-  onLogin: (email: string) => void
+  onLogin: (email: string, role: 'super' | 'domain' | 'user') => void
 }
 
 export function Login({ onLogin }: LoginProps) {
@@ -17,8 +17,8 @@ export function Login({ onLogin }: LoginProps) {
     setError('')
     setLoading(true)
     try {
-      const loggedInEmail = await login(email.trim(), password)
-      onLogin(loggedInEmail)
+      const data = await login(email.trim(), password)
+      onLogin(data.email, data.role)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed')
     } finally {
