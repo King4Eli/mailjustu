@@ -5,8 +5,10 @@ name: mail_justu
 # Layer it onto the base stack with:
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.clamav.yml up -d
 #
-# Wiring ClamAV into Postfix's content filter (so it actually scans
-# messages, not just runs standalone) is a deployment-specific follow-up.
+# Postfix is already configured (see ./.env/postfix.env) to talk to
+# mail_justu_clamav_milter as a milter; it will simply skip that milter
+# (per milter_default_action=accept) if this file isn't included, same as
+# opendkim/rspamd.
 
 services:
   mail_justu_clamav:
@@ -15,6 +17,27 @@ services:
     restart: unless-stopped
     volumes:
       - clamav_db:/var/lib/clamav
+    networks:
+      mail_justu_network:
+        # clamav-milter's hostname parser rejects underscores (same issue
+        # as Dovecot's doveadm HTTP API, see api/src/doveadm.js) -- give it
+        # a hyphen-only alias to connect to instead of mail_justu_clamav.
+        aliases:
+          - clamav
+
+  # Same image, different command: runs clamav-milter instead of clamd,
+  # actually wiring virus scanning into Postfix's milter chain (talks to
+  # clamd above over TCP -- see ./volumes/clamav-milter/clamav-milter.conf).
+  mail_justu_clamav_milter:
+    image: clamav/clamav
+    container_name: mail-clamav-milter
+    restart: unless-stopped
+    command: ["clamav-milter", "-c", "/etc/clamav/clamav-milter.conf"]
+    volumes:
+      - ./volumes/clamav-milter:/etc/clamav
+    depends_on:
+      mail_justu_clamav:
+        condition: service_healthy
     networks:
       - mail_justu_network
 

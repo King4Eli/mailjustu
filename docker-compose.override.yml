@@ -20,3 +20,24 @@ services:
       - ./volumes/dovecot:/etc/dovecot
       - ./volumes/mail:/var/mail
       - ./volumes/certs:/etc/ssl/mail
+
+  mail_justu_api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "4000:80"
+
+  mail_justu_webui:
+    build:
+      context: .
+      dockerfile: webUI/Dockerfile
+    ports:
+      - "4001:80"
+
+  mail_justu_admin:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    ports:
+      - "4002:80"

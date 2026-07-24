@@ -7,6 +7,7 @@ import { withImap, resolveFolder } from '../imap.js'
 import { requireSession } from '../middleware/auth.js'
 import { pool } from '../db.js'
 import { getMailboxUsageBytes } from '../doveadm.js'
+import { isValidFolderName } from '../validators.js'
 
 export const mailRouter = Router()
 mailRouter.use(requireSession)
@@ -68,14 +69,22 @@ mailRouter.get('/folders', async (req, res) => {
 mailRouter.post('/folders', async (req, res) => {
   const { email, password } = req.mailSession
   const { name } = req.body || {}
-  if (!name || /[/\\]/.test(name)) return res.status(400).json({ error: 'name is required and cannot contain / or \\' })
+  if (!isValidFolderName(name)) return res.status(400).json({ error: 'name is required and cannot contain / or \\' })
+  const limit = Number(process.env.MAX_FOLDERS_PER_MAILBOX) || null
   try {
     await withImap(email, password, async (client) => {
+      if (limit) {
+        const list = await client.list()
+        const customCount = list.filter((box) => !box.specialUse).length
+        if (customCount >= limit) {
+          throw Object.assign(new Error(`You're at the limit of ${limit} custom folders. Delete one before creating another.`), { overLimit: true })
+        }
+      }
       await client.mailboxCreate(name)
     })
     res.status(201).json({ ok: true, path: name })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    res.status(err.overLimit ? 409 : 500).json({ error: err.message })
   }
 })
 
@@ -123,7 +132,7 @@ mailRouter.get('/messages', async (req, res) => {
           read: msg.flags.has('\\Seen'),
           starred: msg.flags.has('\\Flagged'),
           preview: cleanPreview(parsed.text),
-          attachments: (parsed.attachments || []).map((a) => ({ name: a.filename || 'attachment', size: `${Math.ceil(a.size / 1024)} KB` })),
+          attachments: (parsed.attachments || []).map((a, index) => ({ index, name: a.filename || 'attachment', size: `${Math.ceil(a.size / 1024)} KB` })),
         })
       }
       return out.reverse()
@@ -157,11 +166,33 @@ mailRouter.get('/messages/:uid', async (req, res) => {
         read: true,
         starred: msg.flags.has('\\Flagged'),
         body: parsed.text || parsed.html || '',
-        attachments: (parsed.attachments || []).map((a) => ({ name: a.filename || 'attachment', size: `${Math.ceil(a.size / 1024)} KB` })),
+        attachments: (parsed.attachments || []).map((a, index) => ({ index, name: a.filename || 'attachment', size: `${Math.ceil(a.size / 1024)} KB` })),
       }
     })
     if (!message) return res.status(404).json({ error: 'Message not found' })
     res.json({ message })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+mailRouter.get('/messages/:uid/attachments/:index', async (req, res) => {
+  const { email, password } = req.mailSession
+  const folder = req.query.folder || 'INBOX'
+  const uid = Number(req.params.uid)
+  const index = Number(req.params.index)
+  try {
+    const attachment = await withImap(email, password, async (client) => {
+      await client.mailboxOpen(folder)
+      const msg = await client.fetchOne(uid, { source: true }, { uid: true })
+      if (!msg) return null
+      const parsed = await simpleParser(msg.source)
+      return (parsed.attachments || [])[index] || null
+    })
+    if (!attachment) return res.status(404).json({ error: 'Attachment not found' })
+    res.setHeader('Content-Type', attachment.contentType || 'application/octet-stream')
+    res.setHeader('Content-Disposition', `attachment; filename="${(attachment.filename || 'attachment').replace(/"/g, '')}"`)
+    res.send(attachment.content)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

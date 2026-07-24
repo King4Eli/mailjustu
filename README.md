@@ -77,10 +77,15 @@ account:
 - **Super admin** -- email listed in `./.env/api.env`'s
   `SUPER_ADMIN_EMAILS`. Full access: every domain, mailbox, and alias,
   plus Services/health/stats. Bootstrapping the first one has no
-  self-serve flow (there's nobody to authorize it yet) -- insert it
-  directly into `virtual_users` the first time, see
-  `.test.credentials.txt` for how the seeded `admin@mail.example.com` was
-  created.
+  self-serve flow through the dashboard itself (there's nobody to
+  authorize it yet) -- instead, from the host:
+  ```bash
+  docker exec -it mail_justu_api node scripts/bootstrap-admin.js admin@mail.example.com 'somepassword'
+  ```
+  creates (or resets) that mailbox with `is_admin=1`. Then add the same
+  email to `SUPER_ADMIN_EMAILS` in `./.env/api.env` and recreate the api
+  container for full super-admin access (that check is env-based, not a
+  DB column, so the script can't grant it alone).
 - **Domain admin** -- a mailbox with `virtual_users.is_admin = true`
   (set by a super admin, from the Mailboxes tab or `PATCH
   /api/admin/mailboxes/:id`). Scoped to their own domain only --
@@ -114,9 +119,11 @@ limits for their own domain.
 ## Environment
 
 Each component's configuration lives in its own file under `./.env/`
-(`mysql.env`, `postfix.env`, `rspamd.env`, `api.env`, `admin.env`,
+(`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `admin.env`,
 `webui.env`, ...) rather than one shared `.env`. Update the passwords in
 there before any real deployment -- the checked-in values are placeholders.
+There's no `mysql.env` here -- `api.env`'s `DB_*` vars point at the shared
+`global_mysql` instance, which this project doesn't own or configure.
 
 ## Frontends
 
@@ -148,17 +155,22 @@ touches the browser after login.
 
 ## Backing up / restoring
 
-`./schema.sql` is the schema alone (what `api/` applies on boot).
-`./dump.sql` is a full `mysqldump` snapshot (schema + data) taken at a
-point in time -- regenerate it with:
+`./schema.sql` is the schema alone (what `api/` applies on boot). Since
+the database lives in the shared `global_mysql` instance (not a container
+this project starts or owns), back it up with the app-scoped credentials
+from `.env/api.env`:
 
 ```bash
-docker exec mail-mysql mysqldump -u root -p"$(grep ^MYSQL_ROOT_PASSWORD .env/mysql.env | cut -d= -f2)" \
-  --databases mail --routines --triggers > dump.sql
+docker exec global_mysql mysqldump \
+  -u "$(grep ^DB_USER .env/api.env | cut -d= -f2)" \
+  -p"$(grep ^DB_PASSWORD .env/api.env | cut -d= -f2)" \
+  --databases "$(grep ^DB_NAME .env/api.env | cut -d= -f2)" --routines --triggers > dump.sql
 ```
 
-It contains bcrypt password hashes, not plaintext -- still, treat it as a
-secret, same as the `.env/` files.
+(The app-scoped user lacks the `PROCESS` privilege, so mysqldump prints a
+harmless tablespace warning to stderr -- the dump itself still completes.)
+The resulting dump contains bcrypt password hashes, not plaintext --
+still, treat it as a secret, same as the `.env/` files.
 
 ## Known follow-ups
 

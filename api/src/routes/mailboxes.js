@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { pool } from '../db.js'
 import { requireDomainAdmin } from '../middleware/auth.js'
 import { getMailboxUsageBytes } from '../doveadm.js'
+import { normalizeMailboxEmail } from '../validators.js'
 
 export const mailboxesRouter = Router()
 mailboxesRouter.use(requireDomainAdmin)
@@ -28,10 +29,9 @@ mailboxesRouter.post('/', async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'email and password are required' })
   }
-  const match = /^([^@\s]+)@([^@\s]+)$/.exec(email.trim().toLowerCase())
-  if (!match) return res.status(400).json({ error: 'email must look like user@domain' })
-  const [, , domain] = match
-  const normalizedEmail = match[0]
+  const normalized = normalizeMailboxEmail(email)
+  if (!normalized) return res.status(400).json({ error: 'email must look like user@domain' })
+  const { email: normalizedEmail, domain } = normalized
 
   if (req.adminScope.domain && domain !== req.adminScope.domain) {
     return res.status(403).json({ error: `As a domain admin you can only create mailboxes on ${req.adminScope.domain}` })
@@ -91,14 +91,16 @@ mailboxesRouter.patch('/:id', async (req, res) => {
 
 mailboxesRouter.delete('/:id', async (req, res) => {
   const { domain } = req.adminScope
-  if (domain) {
-    const [[row]] = await pool.query(
-      `SELECT vd.name AS domain FROM virtual_users vu JOIN virtual_domains vd ON vu.domain_id = vd.id WHERE vu.id = ?`,
-      [req.params.id],
-    )
-    if (!row || row.domain !== domain) {
-      return res.status(403).json({ error: 'That mailbox is not on your domain' })
-    }
+  const [[row]] = await pool.query(
+    `SELECT vu.email, vd.name AS domain FROM virtual_users vu JOIN virtual_domains vd ON vu.domain_id = vd.id WHERE vu.id = ?`,
+    [req.params.id],
+  )
+  if (!row) return res.status(404).json({ error: 'Mailbox not found' })
+  if (domain && row.domain !== domain) {
+    return res.status(403).json({ error: 'That mailbox is not on your domain' })
+  }
+  if (row.email === req.mailSession.email) {
+    return res.status(403).json({ error: "You can't delete your own account -- sign in as another admin to do that" })
   }
   await pool.query('DELETE FROM virtual_users WHERE id = ?', [req.params.id])
   res.json({ ok: true })

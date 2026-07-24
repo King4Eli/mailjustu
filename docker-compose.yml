@@ -1,14 +1,5 @@
 name: mail_justu
 
-# Base stack: the minimum required to send and receive mail.
-#   docker compose up -d
-#
-# docker-compose.override.yml is auto-loaded alongside this file and adds
-# dev-only ports plus bind-mounted, editable config under ./volumes.
-#
-# Optional add-ons (spam filtering, DKIM, antivirus) live in their own
-# docker-compose.*.yml files -- see README.md for how to layer them in.
-
 services:
   # Receives and sends email over SMTP.
   mail_justu_postfix:
@@ -18,9 +9,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env/postfix.env
-    # depends_on:
-    #   global_mysql:
-    #     condition: service_healthy
     ports:
       - "25:25"
       - "465:465"
@@ -36,9 +24,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env/dovecot.env
-    # depends_on:
-    #   global_mysql:
-    #     condition: service_healthy
     ports:
       # This image runs rootless: imap-login actually binds the unprivileged
       # 31143/31993 (see ./volumes/dovecot/vendor.d/rootless.conf), not 143/993.
@@ -48,28 +33,48 @@ services:
       - mail_justu_network
       - shared-global-network
 
-  # Backend for admin/ and webUI/: mailbox management, IMAP/SMTP for
-  # webmail, and service health/stats. Browsers never talk to the mail
-  # stack directly.
+  # Backend for admin/ and webUI/:
   mail_justu_api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
+    image: king4eli/mail_justu_api:latest
     container_name: mail_justu_api
     restart: unless-stopped
     env_file:
       - ./.env/api.env
     depends_on:
-      # global_mysql:
-      #   condition: service_healthy
       mail_justu_postfix:
         condition: service_started
       mail_justu_dovecot:
         condition: service_started
-    ports:
-      - "4000:4000"
+    expose:
+      - "80"
     networks:
       - mail_justu_network
+      - shared-global-network
+
+  # Static webUI
+  mail_justu_webui:
+    image: king4eli/mail_justu_webui:latest
+    container_name: mail_justu_webui
+    restart: unless-stopped
+    depends_on:
+      mail_justu_api:
+        condition: service_started
+    expose:
+      - "80"
+    networks:
+      - shared-global-network
+
+  # Static admin dashboard
+  mail_justu_admin:
+    image: king4eli/mail_justu_admin:latest
+    container_name: mail_justu_admin
+    restart: unless-stopped
+    depends_on:
+      mail_justu_api:
+        condition: service_started
+    expose:
+      - "80"
+    networks:
       - shared-global-network
 
 networks:

@@ -6,6 +6,7 @@ import {
   ReplyAll,
   Forward,
   Paperclip,
+  Download,
   ShieldAlert,
   ShieldCheck,
   FolderInput,
@@ -25,6 +26,7 @@ interface ReadingPaneProps {
   onMarkNotSpam: (id: string) => void
   isSpamFolder: boolean
   onMoveTo: (id: string, path: string) => void
+  onDownloadAttachment: (messageId: string, attachmentIndex: number, filename: string) => void
   onReply: (message: EmailMessage, mode: 'reply' | 'replyAll' | 'forward') => void
   onBack?: () => void
 }
@@ -39,6 +41,7 @@ export function ReadingPane({
   onMarkNotSpam,
   isSpamFolder,
   onMoveTo,
+  onDownloadAttachment,
   onReply,
   onBack,
 }: ReadingPaneProps) {
@@ -161,17 +164,20 @@ export function ReadingPane({
           {message.attachments && message.attachments.length > 0 && (
             <div className="mt-6 flex flex-wrap gap-2">
               {message.attachments.map((attachment) => (
-                <div
-                  key={attachment.name}
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                <button
+                  key={attachment.index}
+                  onClick={() => onDownloadAttachment(message.id, attachment.index, attachment.name)}
+                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition hover:opacity-80"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                  title={`Download ${attachment.name}`}
                 >
                   <Paperclip size={14} />
                   <span className="font-medium" style={{ color: 'var(--text)' }}>
                     {attachment.name}
                   </span>
                   <span style={{ color: 'var(--text-faint)' }}>{attachment.size}</span>
-                </div>
+                  <Download size={13} />
+                </button>
               ))}
             </div>
           )}

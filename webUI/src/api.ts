@@ -99,7 +99,7 @@ export interface ApiMessage {
   starred: boolean
   preview?: string
   body?: string
-  attachments?: { name: string; size: string }[]
+  attachments?: { index: number; name: string; size: string }[]
 }
 
 export function getMessages(folder: string): Promise<{ folder: string; messages: ApiMessage[] }> {
@@ -130,6 +130,22 @@ export function markAsSpam(uid: number, folder: string) {
 
 export function markAsNotSpam(uid: number, folder: string) {
   return moveMessage(uid, folder, 'Inbox')
+}
+
+export async function downloadAttachment(uid: number, folder: string, index: number, filename: string) {
+  const session = getStoredSession()
+  const res = await fetch(
+    `${API_BASE}/mail/messages/${uid}/attachments/${index}?folder=${encodeURIComponent(folder)}`,
+    { headers: session ? { Authorization: `Bearer ${session.token}` } : {} },
+  )
+  if (!res.ok) throw new ApiError(`Failed to download attachment (${res.status})`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export function deleteMessage(uid: number, folder: string) {

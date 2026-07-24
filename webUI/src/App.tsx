@@ -260,6 +260,16 @@ export default function App() {
     }
   }
 
+  async function downloadAttachment(messageId: string, index: number, filename: string) {
+    const message = messageId === selectedMessage?.id ? selectedMessage : messages.find((m) => m.id === messageId)
+    const folder = message?.sourceFolder || activeFolder
+    try {
+      await api.downloadAttachment(Number(messageId), folder, index, filename)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download attachment')
+    }
+  }
+
   async function moveTo(id: string, target: string) {
     const message = messages.find((m) => m.id === id)
     const folder = message?.sourceFolder || activeFolder
@@ -437,6 +447,7 @@ export default function App() {
               onMarkNotSpam={markNotSpam}
               isSpamFolder={isSpamFolder}
               onMoveTo={moveTo}
+              onDownloadAttachment={downloadAttachment}
               onReply={handleReply}
               onBack={() => {
                 setSelectedId(null)

@@ -1,61 +1,57 @@
-Things not done, or that need a real domain/DNS/production infra to finish.
-Not urgent for local dev -- but don't assume any of this "just works" beyond
-localhost.
+ 
+### Fixable right now, no domain needed
+>>> .env/webui.env's VITE_API_BASE_URL/VITE_ADMIN_URL and .env/admin.env's
+    VITE_API_BASE_URL still point at localhost. deploy.sh bakes these into
+    the built bundle at image-build time (see webUI/Dockerfile) -- ship a
+    live build with these unchanged and the frontend simply can't reach the
+    API, silently, from every visitor. Set both to the real public URLs
+    before running deploy.sh.
+>>> CORS_ORIGIN in .env/api.env is `http://localhost:5173,http://localhost:5174`
+    -- update to the real webUI/admin origins or the API rejects every
+    browser request from the live frontend. 
 
-## Needs a real, owned domain + DNS
-- OpenDKIM now signs + verifies (Mode "sv", selector "mail", keypair under
-  ./volumes/opendkim/keys, KeyTable/SigningTable/TrustedHosts in
-  ./volumes/opendkim/conf.d) -- confirmed working end to end, outbound
-  mail carries a valid DKIM-Signature. What's still outstanding is
-  publishing the real <selector>._domainkey.<domain> TXT record (see
-  ./volumes/opendkim/keys/mail.txt for the record content) -- can't be
-  done against the placeholder mail.example.com, needs a real domain.
-- The admin dashboard's Domains tab generates MX/A/SPF/DMARC records per
-  domain, but MAIL_HOSTNAME/MAIL_PUBLIC_IP in ./.env/api.env are still
-  placeholders -- set them to your real hostname/IP or the records it
-  prints are structurally correct but point nowhere.
-- TLS certs: ./volumes/certs and ./volumes/dovecot/ssl currently hold
-  whatever self-signed cert shipped in the base images. Replace with real
-  certs (Let's Encrypt or otherwise) for anything internet-facing.
-- Postfix's smtp_tls_security_level=may means it'll happily send in the
-  clear if the far end doesn't support TLS. Fine for internal testing,
-  not for production.
+### Blocked on a real, owned domain (see full detail further down)
+>>> DKIM DNS TXT record, MAIL_HOSTNAME/MAIL_PUBLIC_IP, real TLS certs, then
+    tighten smtp_tls_security_level from `may` to `encrypt`.
 
-## Needs infra decisions I deliberately didn't make for you
-- Mail queue visibility isn't built: real queue depth means either mounting
-  the Docker socket into api/ (root-equivalent host access -- didn't want
-  to add that silently) or adding a small authenticated helper inside the
-  postfix container. Pick one.
-- Mail activity / security event feeds: same story, need log
-  parsing/aggregation (Postfix logs to syslog inside its container, not
-  currently shipped anywhere api/ can read).
-- ClamAV runs standalone -- it's not wired into Postfix's content_filter,
-  so nothing is actually scanned yet. Needs a milter/filter integration
-  decision (clamav-milter vs content_filter).
-- Removed the admin nav items/buttons that didn't do anything yet (Mail
-  activity, Mail queue, Security, Storage, Settings, notifications bell,
-  "Documentation" link, the fake "Alex Kim" profile) rather than leave
-  dead UI in front of you -- add them back once the above are real.
 
-## RBAC (super admin / domain admin / user) -- how it actually works
-- There's no self-serve "first admin" signup. The seeded
-  admin@mail.example.com super admin was created with a direct SQL insert
-  (see .test.credentials.txt) since /api/admin/mailboxes itself requires
-  an admin session -- chicken/egg for the very first one. Document (or
-  script) this bootstrap step before handing this off to someone else.
-- Only super admins can grant/revoke is_admin (PATCH
-  /api/admin/mailboxes/:id) or create/delete domains. A domain admin
-  cannot promote a co-admin on their own domain -- by design, to avoid an
-  easy privilege-escalation loop, but worth revisiting if that's too
-  restrictive in practice.
-- Domain admins can still be deleted (including by themselves) with no
-  "don't lock yourself out" guard.
+## Needs a real, owned domain + DNS (can't be completed against the
+## mail.example.com placeholder, not a code problem)
+- DKIM signing works end to end (Mode "sv", confirmed by sending real
+  mail and checking the delivered DKIM-Signature header) but the
+  <selector>._domainkey.<domain> TXT record can't be published -- see
+  ./volumes/opendkim/keys/mail.txt for the record content once you have
+  a real domain.
+- MAIL_HOSTNAME/MAIL_PUBLIC_IP in ./.env/api.env are still placeholders,
+  so the admin dashboard's generated MX/A/SPF/DMARC records are
+  structurally correct but point nowhere.
+- TLS certs under ./volumes/certs and ./volumes/dovecot/ssl are whatever
+  self-signed cert shipped in the base images. Replace with real certs
+  (Let's Encrypt or otherwise), then tighten Postfix's
+  smtp_tls_security_level from `may` (opportunistic -- sends cleartext if
+  the far end doesn't support TLS) to `encrypt`.
+
+## NEEDS ATTENTION -- real gaps, but the fix requires a decision only you
+## can make (architecture/tradeoff), not just more code
+- Mail queue visibility (Postfix queue depth) still isn't built. Same two
+  options as before: mount the Docker socket into api/ (root-equivalent
+  host access) or add a small authenticated TCP helper inside a custom
+  postfix image -- this session wired the equivalent pattern for Dovecot
+  (doveadm HTTP API, see api/src/doveadm.js) and ClamAV (clamav-milter,
+  see docker-compose.clamav.yml), but boky/postfix is used as a stock
+  image with no custom Dockerfile, so doing the same for the queue means
+  taking on that build for the first time. Pick an option before building it.
+- Mail activity / security event feed: still needs a log aggregation
+  strategy -- Postfix logs to syslog inside its own container, nothing
+  currently ships those logs anywhere api/ can read them.
+- Session storage is an in-memory token map in api/ (single replica,
+  wiped on restart). Redis is already running when the rspamd overlay is
+  included and could back sessions instead, but that would make login
+  persistence depend on an otherwise-optional add-on -- decide whether
+  Redis (or MySQL-backed sessions) becomes a required part of the base
+  stack, rather than silently coupling auth to an optional service.
 
 ## Cleanup / consistency, not urgent
-- ./.env/mysql.env and the old dedicated-mysql setup are unused now that
-  ./.env/api.env points at the shared global_mysql instance -- either
-  delete mysql.env or decide it's the fallback for standalone (non-shared)
-  deployments and document that split explicitly.
 - ./volumes/postfix/mysql-virtual-*.cf and
   ./volumes/dovecot/conf.d/auth-sql.conf hardcode the global_mysql
   credentials (mysql: map files don't support env expansion) -- if you
@@ -68,45 +64,29 @@ localhost.
 - shared-global-network is `external: true` -- this compose file will
   refuse to start on a machine that doesn't already have that network
   created by whatever else manages it. Not portable as-is.
-- api/src/db.js's migrate() uses plain `ALTER TABLE ADD COLUMN` wrapped in
-  a duplicate-column catch, not `ADD COLUMN IF NOT EXISTS` -- that syntax
-  errored on this MySQL 8.0.46 instance. If you add more columns later,
-  follow the same catch-ER_DUP_FIELDNAME pattern.
-- No automated tests. Everything so far has been verified by hand
-  (curl + a couple of throwaway Puppeteer scripts).
+- api/test/ covers pure validation logic and the session/auth middleware
+  (9 tests, `npm test` in api/) -- a real starting point, but there's
+  still no coverage for the IMAP/SMTP/MySQL-backed routes themselves
+  (would need a mocked or containerized integration harness). Expand
+  as those routes change, don't treat 9 passing tests as "tested."
 
 ## Known limitations, probably fine to leave
-- Webmail/admin sessions are an in-memory token->{email,password,role,
-  domain} map in api/ (see api/src/middleware/auth.js) -- restarting the
-  api container logs everyone out, and it doesn't scale past one api
-  replica.
 - No password reset / account self-service flow -- mailbox creation is
   admin-only via the dashboard or POST /api/admin/mailboxes.
-- Aliases only forward to a mailbox on this server (virtual_aliases.
-  destination must be a real local mailbox) -- no forwarding to external
-  addresses. They're also locked to the owning mailbox's own domain (see
-  README) -- that's intentional, not a bug.
-- MAX_MAILBOXES_PER_DOMAIN / MAX_ALIASES_PER_MAILBOX / quota_mb (and their
-  per-domain overrides, set via the admin Domains tab) are only checked
-  when creating a new mailbox/alias -- lowering a limit doesn't
-  retroactively remove anything already over it (storage quota is the
-  exception: Dovecot enforces that live, so a mailbox already over a
-  newly-lowered quota just can't accept new mail until it's under again).
-- Custom IMAP folders (webUI's "New folder") have no count limit.
-- File uploads: compose-time attachments work end to end (multer on the
-  API, real MIME attachments via nodemailer, saved to Sent too). There's
-  no size/type restriction beyond multer's 25 MB-per-file/10-files caps,
-  and no per-mailbox aggregate attachment quota beyond the mailbox's
-  overall storage quota. Receiving attachments works (parsed via
-  mailparser, name+size shown) but there's no download endpoint yet.
-- Per-mailbox storage usage now shows in the admin Mailboxes tab ("X of Y
-  MB used" + a bar), via Dovecot's doveadm HTTP API (api/src/doveadm.js,
-  doveadm mailboxStatus vsize, summed across folders). Needed
-  DOVEADM_PASSWORD wired through ./.env/dovecot.env + ./.env/api.env
-  (Dovecot's doveadm HTTP listener was already configured for this, just
-  unused) -- and Dovecot's HTTP server rejects Host headers with
-  underscores, so the client overrides Host since our service name is
-  mail_justu_dovecot.
+- Aliases only forward to a mailbox on this server and are locked to the
+  owning mailbox's own domain -- intentional, not a bug (see README).
+- MAX_MAILBOXES_PER_DOMAIN / MAX_ALIASES_PER_MAILBOX / MAX_FOLDERS_PER_MAILBOX
+  / quota_mb are only checked when creating a new mailbox/alias/folder --
+  lowering a limit doesn't retroactively remove anything already over it
+  (storage quota is the exception: Dovecot enforces that live).
+- File uploads: no size/type restriction beyond multer's 25 MB-per-file/
+  10-files caps, no per-mailbox aggregate attachment quota beyond overall
+  storage quota. Downloading received attachments now works
+  (GET /api/mail/messages/:uid/attachments/:index).
+- ClamAV milter (./volumes/clamav-milter/clamav-milter.conf) fails open
+  (`OnFail Accept`) if clamd is unreachable/erroring, so a scanner outage
+  doesn't block all mail -- flip to a fail-closed action there if you'd
+  rather block mail than risk missing a scan.
 - Rspamd's {= env.X =} config templating only resolves a handful of names
   baked into its own default rspamd.conf; custom env vars silently fall
   back to defaults instead of erroring. See the comment in

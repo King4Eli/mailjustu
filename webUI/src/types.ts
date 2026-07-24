@@ -1,4 +1,5 @@
 export interface Attachment {
+  index: number
   name: string
   size: string
 }
