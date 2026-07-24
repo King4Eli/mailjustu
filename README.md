@@ -47,12 +47,11 @@ For a production deploy, skip the dev override and supply your own:
 
 ## Mailboxes are real accounts
 
-Virtual domains/users/aliases live in MySQL (`./schema.sql`) and are read
-directly by Postfix (`mysql:` maps) and Dovecot (SQL passdb) -- so a
-mailbox created through the admin dashboard (or the API) can immediately
-send, receive, and log in over real SMTP/IMAP. The `api/` container
-applies `schema.sql` on startup (idempotent), so there's no manual
-migration step. Each mailbox also gets a real, Dovecot-enforced storage
+Virtual domains/users/aliases live in MySQL and are read directly by
+Postfix (`mysql:` maps) and Dovecot (SQL passdb) -- so a mailbox created
+through the admin dashboard (or the API) can immediately send, receive,
+and log in over real SMTP/IMAP. The database must be provisioned before
+the API starts. Each mailbox also gets a real, Dovecot-enforced storage
 quota (`quota_mb`, per-domain, see below).
 
 Mailboxes are managed through the admin dashboard's "Mailboxes" tab, or
@@ -155,9 +154,8 @@ touches the browser after login.
 
 ## Backing up / restoring
 
-`./schema.sql` is the schema alone (what `api/` applies on boot). Since
-the database lives in the shared `global_mysql` instance (not a container
-this project starts or owns), back it up with the app-scoped credentials
+The database lives in the shared `global_mysql` instance (not a container
+this project starts or owns). Back it up with the app-scoped credentials
 from `.env/api.env`:
 
 ```bash

@@ -3,21 +3,18 @@ name: mail_justu
 services:
   mail_justu_api:
     build:
-      context: .
-      dockerfile: api/Dockerfile
+      context: ./api
     ports:
       - "4000:80"
 
   mail_justu_webui:
     build:
-      context: .
-      dockerfile: webUI/Dockerfile
+      context: ./webUI
     ports:
       - "4001:80"
 
   mail_justu_admin:
     build:
-      context: .
-      dockerfile: admin/Dockerfile
+      context: ./admin
     ports:
       - "4002:80"

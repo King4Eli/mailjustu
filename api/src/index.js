@@ -1,6 +1,5 @@
 import express from 'express'
 import cors from 'cors'
-import { migrate } from './db.js'
 import { authRouter } from './routes/auth.js'
 import { mailRouter } from './routes/mail.js'
 import { aliasesRouter } from './routes/aliases.js'
@@ -29,11 +28,4 @@ app.use((err, req, res, next) => {
 
 const port = Number(process.env.PORT) || 4000
 
-migrate()
-  .then(() => {
-    app.listen(port, () => console.log(`api listening on :${port}`))
-  })
-  .catch((err) => {
-    console.error('Migration failed:', err)
-    process.exit(1)
-  })
+app.listen(port, () => console.log(`api listening on :${port}`))

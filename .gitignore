@@ -1,3 +1,2 @@
-volumes
 .env/deploy.json
 deploy.sh

@@ -1,16 +1,5 @@
-// Creates (or promotes) the first admin mailbox, so there's a way in
-// before any admin session exists -- /api/admin/mailboxes itself requires
-// one. Run from inside the api container, e.g.:
-//
-//   docker exec -it mail_justu_api node scripts/bootstrap-admin.js admin@mail.example.com 'somepassword'
-//
-// This grants virtual_users.is_admin (domain admin for that one domain).
-// For full super-admin access (every domain, Services/health/stats), also
-// add the email to SUPER_ADMIN_EMAILS in ./.env/api.env and recreate the
-// api container -- that check is env-based, not a DB column, so this
-// script can't grant it by itself.
 import bcrypt from 'bcryptjs'
-import { pool, migrate } from '../src/db.js'
+import { pool } from '../src/db.js'
 
 const [, , email, password] = process.argv
 
@@ -25,8 +14,6 @@ if (!match) {
   process.exit(1)
 }
 const [normalizedEmail, , domain] = match
-
-await migrate()
 
 const conn = await pool.getConnection()
 try {
