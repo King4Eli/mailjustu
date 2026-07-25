@@ -1,14 +1,8 @@
 name: mail_justu
 
 services:
-  mail_justu_api:
+  mail_justu_server:
     build:
-      context: ./api
-    ports:
-      - "4000:80"
-
-  mail_justu_webfront:
-    build:
-      context: ./webFront
+      context: ./bigapp
     ports:
       - "4001:80"

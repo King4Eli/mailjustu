@@ -1,10 +1,13 @@
 # mailserver
 
 A self-hosted mail server (Postfix + Dovecot + MySQL, with optional spam
-filtering, DKIM, and antivirus), a small API (`api/`) that provisions
-mailboxes and speaks IMAP/SMTP on their behalf, and two React frontends:
-`admin/` (an operator dashboard) and `webUI/` (a webmail client). Both
-frontends are wired to the real API -- no mock data.
+filtering, DKIM, and antivirus). Everything else is one Next.js app,
+`bigapp/`: two React frontends served from one origin -- `/admin` (an
+operator dashboard, source in `bigapp/admin/`) and `/webmail` (a webmail
+client, source in `bigapp/webmail/`) -- plus the API itself as Route
+Handlers under `/api` (`bigapp/app/api/`, logic in `bigapp/lib/api/`).
+There's no separate backend service; the API used to be its own Express
+process and was absorbed directly into Next.js.
 
 ## Running the mail stack
 
@@ -58,11 +61,11 @@ Mailboxes are managed through the admin dashboard's "Mailboxes" tab, or
 directly via the API once you're logged in as an admin:
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:4000/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:4001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@mail.example.com","password":"..."}' | jq -r .token)
 
-curl -X POST http://localhost:4000/api/admin/mailboxes \
+curl -X POST http://localhost:4001/api/admin/mailboxes \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"email":"you@mail.example.com","password":"..."}'
 ```
@@ -79,10 +82,10 @@ account:
   self-serve flow through the dashboard itself (there's nobody to
   authorize it yet) -- instead, from the host:
   ```bash
-  docker exec -it mail_justu_api node scripts/bootstrap-admin.js admin@mail.example.com 'somepassword'
+  docker exec -it mail_justu_server node scripts/bootstrap-admin.js admin@mail.example.com 'somepassword'
   ```
   creates (or resets) that mailbox with `is_admin=1`. Then add the same
-  email to `SUPER_ADMIN_EMAILS` in `./.env/api.env` and recreate the api
+  email to `SUPER_ADMIN_EMAILS` in `./.env/api.env` and recreate the
   container for full super-admin access (that check is env-based, not a
   DB column, so the script can't grant it alone).
 - **Domain admin** -- a mailbox with `virtual_users.is_admin = true`
@@ -118,39 +121,49 @@ limits for their own domain.
 ## Environment
 
 Each component's configuration lives in its own file under `./.env/`
-(`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `admin.env`,
-`webui.env`, ...) rather than one shared `.env`. Update the passwords in
-there before any real deployment -- the checked-in values are placeholders.
-There's no `mysql.env` here -- `api.env`'s `DB_*` vars point at the shared
+(`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `server.env`, ...)
+rather than one shared `.env`. Update the passwords in there before any real
+deployment -- the checked-in values are placeholders. There's no
+`mysql.env` here -- `api.env`'s `DB_*` vars point at the shared
 `global_mysql` instance, which this project doesn't own or configure.
 
-## Frontends
+`server.env` (`ADMIN_TITLE`, `MAIL_HOST`) is read live by `bigapp`'s
+Next.js server on every request/at container startup, not baked in at
+build time -- change it and restart the container, no rebuild needed.
+`api.env` is also loaded into the same container now, since the API runs
+inside it.
+
+## Frontends + API
 
 ```bash
-cd admin && npm install && npm run dev   # operator dashboard, :5173
-cd webUI && npm install && npm run dev   # webmail client, :5174
+cd bigapp && npm install && npm run dev   # everything, :4001 (/webmail, /admin, /api)
 ```
 
-Both read their dev/preview ports and public `VITE_` config (including
-where to find the API) from `../.env/admin.env` and `../.env/webui.env`.
-Neither talks to Docker or the mail stack directly -- everything goes
-through `api/` (`:4000`).
+`bigapp` is a single Next.js app serving both `/webmail` and `/admin`
+(component source lives in `bigapp/webmail/src/` and `bigapp/admin/src/`)
+plus the API itself under `/api` (`bigapp/app/api/`, logic in
+`bigapp/lib/api/`) -- one process, one container, no separate service to
+reach or configure a URL for.
 
-## api/
+## bigapp/lib/api/
 
-Express server, no ORM. `src/routes/auth.js` verifies logins by actually
-connecting to Dovecot over IMAP, then resolves a role (super/domain/user)
-from `SUPER_ADMIN_EMAILS` + `virtual_users.is_admin` and stores it on the
-session; `src/routes/mail.js` proxies folders/messages/send (with
-attachments, via `multer`)/flags/move/delete over IMAP (imapflow) and SMTP
-(nodemailer); `src/routes/aliases.js` is the self-service, domain-scoped
-alias CRUD; `src/routes/mailboxes.js` and `src/routes/domains.js` are
-role-scoped admin CRUD against MySQL; `src/routes/health.js` and
-`src/routes/stats.js` (super-admin only) do live TCP checks and proxy
-Rspamd's real controller stats. Webmail/admin sessions are an in-memory
-token -> {email, password, role, domain} map with a TTL
-(`SESSION_TTL_MINUTES`), not JWTs -- simple, and the password never
-touches the browser after login.
+No ORM, no Express -- plain Next.js Route Handlers (`bigapp/app/api/**/route.ts`)
+calling into `bigapp/lib/api/`. `lib/api/auth.ts`'s `requireSession` etc.
+verify logins by actually connecting to Dovecot over IMAP, then resolve a
+role (super/domain/user) from `SUPER_ADMIN_EMAILS` + `virtual_users.is_admin`
+and store it on the session; the `app/api/mail/*` routes handle
+folders/messages/send (with attachments, via the Fetch API's native
+`FormData`)/flags/move/delete over IMAP (imapflow) and SMTP (nodemailer);
+`app/api/mail/aliases/*` is the self-service, domain-scoped alias CRUD;
+`app/api/admin/mailboxes/*` and `app/api/admin/domains/*` are role-scoped
+admin CRUD against MySQL; `app/api/admin/health` and `app/api/admin/stats`
+(super-admin only, both `force-dynamic` -- see comments in those files for
+why) do live TCP checks and proxy Rspamd's real controller stats.
+Webmail/admin sessions are an in-memory token -> {email, password, role,
+domain} map with a TTL (`SESSION_TTL_MINUTES`), not JWTs -- simple, and the
+password never touches the browser after login. That map lives in the one
+long-running Next.js process (`next start`, no clustering), same execution
+model Express ran under.
 
 ## Backing up / restoring
 

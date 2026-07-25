@@ -45,10 +45,7 @@ const COLORS = {
   Redis: 'pink',
 }
 
-const config = {
-  title: import.meta.env.VITE_ADMIN_TITLE || 'Postmaster',
-  mailHost: import.meta.env.VITE_MAIL_HOST || 'mail.example.com',
-}
+import { config } from './config'
 
 function formatBytes(bytes) {
   if (bytes == null) return null

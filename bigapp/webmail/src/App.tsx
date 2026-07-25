@@ -414,7 +414,7 @@ export default function App() {
           }}
           onToggleSidebar={() => setSidebarOpen(true)}
           email={email}
-          adminUrl={role !== 'user' ? import.meta.env.VITE_ADMIN_URL : undefined}
+          adminUrl={role !== 'user' ? '/admin' : undefined}
           onLogout={handleLogout}
         />
 

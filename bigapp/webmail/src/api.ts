@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL
+// Proxied to the real backend server-side by bigapp/next.config.ts --
+// always same-origin, never needs a per-deployment value.
+const API_BASE = '/api'
 
 const TOKEN_KEY = 'webui_token'
 const EMAIL_KEY = 'webui_email'

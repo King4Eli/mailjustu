@@ -47,13 +47,16 @@ services:
       - mail_justu_network
       - shared-global-network
 
-  # Backend for webFront/:
-  mail_justu_api:
-    image: kingeli/mail_justu_api:latest
-    container_name: mail_justu_api
+  # Next.js server: webmail + admin dashboard at /webmail and /admin, plus
+  # the API itself as Route Handlers under /api (see bigapp/lib/api/ --
+  # formerly a separate Express service, absorbed in here).
+  mail_justu_server:
+    image: kingeli/mail_justu_server:latest
+    container_name: mail_justu_server
     restart: unless-stopped
     env_file:
       - ./.env/api.env
+      - ./.env/server.env
     depends_on:
       mail_justu_postfix:
         condition: service_started
@@ -63,20 +66,6 @@ services:
       - "80"
     networks:
       - mail_justu_network
-      - shared-global-network
-
-  # Static webmail + admin dashboard, served from one origin at /webmail
-  # and /admin (see webFront/nginx.conf).
-  mail_justu_webfront:
-    image: kingeli/mail_justu_webfront:latest
-    container_name: mail_justu_webfront
-    restart: unless-stopped
-    depends_on:
-      mail_justu_api:
-        condition: service_started
-    expose:
-      - "80"
-    networks:
       - shared-global-network
 
 networks:
