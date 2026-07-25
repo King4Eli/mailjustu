@@ -6,26 +6,25 @@ import tailwindcss from '@tailwindcss/vite'
 import dotenv from 'dotenv'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const env = dotenv.config({ path: path.resolve(__dirname, '../.env/webui.env') }).parsed || {}
+// Browser-facing VITE_ values live in a file shared with admin/ -- see
+// .env/public.vite.env. PUBLIC: everything in that file ships to the browser.
+const viteEnv = dotenv.config({ path: path.resolve(__dirname, '../../.env/public.vite.env') }).parsed || {}
 
-// Only VITE_-prefixed keys are meant for the browser bundle; everything else
-// (WEBUI_DEV_*, WEBUI_PREVIEW_*) configures the dev/preview server itself.
 const define = Object.fromEntries(
-  Object.entries(env)
-    .filter(([key]) => key.startsWith('VITE_'))
-    .map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
+  Object.entries(viteEnv).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
 )
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/webmail/',
   plugins: [react(), tailwindcss()],
   define,
   server: {
-    host: env.WEBUI_DEV_HOST || '0.0.0.0',
-    port: Number(env.WEBUI_DEV_PORT) || 5173,
+    host: '0.0.0.0',
+    port: 5174, // offset from admin/'s 5173 so both dev servers can run at once
   },
   preview: {
-    host: env.WEBUI_PREVIEW_HOST || '0.0.0.0',
-    port: Number(env.WEBUI_PREVIEW_PORT) || 4173,
+    host: '0.0.0.0',
+    port: 4174, // offset from admin/'s 4173 so both preview servers can run at once
   },
 })

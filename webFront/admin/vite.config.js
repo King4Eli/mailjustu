@@ -5,25 +5,24 @@ import react from '@vitejs/plugin-react'
 import dotenv from 'dotenv'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const env = dotenv.config({ path: path.resolve(__dirname, '../.env/admin.env') }).parsed || {}
+// Browser-facing VITE_ values live in a file shared with webmail/ -- see
+// .env/public.vite.env. PUBLIC: everything in that file ships to the browser.
+const viteEnv = dotenv.config({ path: path.resolve(__dirname, '../../.env/public.vite.env') }).parsed || {}
 
-// Only VITE_-prefixed keys are meant for the browser bundle; everything else
-// (ADMIN_DEV_*, ADMIN_PREVIEW_*) configures the dev/preview server itself.
 const define = Object.fromEntries(
-  Object.entries(env)
-    .filter(([key]) => key.startsWith('VITE_'))
-    .map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
+  Object.entries(viteEnv).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
 )
 
 export default defineConfig({
+  base: '/admin/',
   plugins: [react()],
   define,
   server: {
-    host: env.ADMIN_DEV_HOST || '0.0.0.0',
-    port: Number(env.ADMIN_DEV_PORT) || 5173,
+    host: '0.0.0.0',
+    port: 5173,
   },
   preview: {
-    host: env.ADMIN_PREVIEW_HOST || '0.0.0.0',
-    port: Number(env.ADMIN_PREVIEW_PORT) || 4173,
+    host: '0.0.0.0',
+    port: 4173,
   },
 })

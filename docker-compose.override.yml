@@ -7,14 +7,8 @@ services:
     ports:
       - "4000:80"
 
-  mail_justu_webui:
+  mail_justu_webfront:
     build:
-      context: ./webUI
+      context: ./webFront
     ports:
       - "4001:80"
-
-  mail_justu_admin:
-    build:
-      context: ./admin
-    ports:
-      - "4002:80"
