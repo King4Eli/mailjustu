@@ -2,7 +2,7 @@ import { ImapFlow, type ListResponse } from 'imapflow'
 
 export async function withImap<T>(email: string, password: string, fn: (client: ImapFlow) => Promise<T>): Promise<T> {
   const client = new ImapFlow({
-    host: process.env.IMAP_HOST || 'mailjustu_dovecot',
+    host: process.env.IMAP_HOST || 'mail_justu_dovecot',
     port: Number(process.env.IMAP_PORT) || 993,
     secure: true,
     tls: { rejectUnauthorized: false },

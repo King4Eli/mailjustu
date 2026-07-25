@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
 
     try {
       await withImap(normalizedEmail, password, async () => {})
-    } catch {
+    } catch (err) {
+      console.error('IMAP login failed for', normalizedEmail, err)
       return apiError(401, 'Invalid email or password')
     }
 
