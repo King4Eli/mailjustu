@@ -47,9 +47,7 @@ services:
       - mail_justu_network
       - shared-global-network
 
-  # Next.js server: webmail + admin dashboard at /webmail and /admin, plus
-  # the API itself as Route Handlers under /api (see bigapp/lib/api/ --
-  # formerly a separate Express service, absorbed in here).
+  # Next.js server: webmail + admin dashboard at /webmail, /admin, /api
   mail_justu_server:
     image: kingeli/mail_justu_server:latest
     container_name: mail_justu_server

@@ -11,6 +11,11 @@ export function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // No self-service reset: login here is the real IMAP/mailbox password,
+  // not a separate app account, and there's no recovery-email concept in
+  // this schema -- only an admin can set a new one (admin dashboard's
+  // Mailboxes tab).
+  const [showForgot, setShowForgot] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -85,6 +90,20 @@ export function Login({ onLogin }: LoginProps) {
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setShowForgot((v) => !v)}
+          className="mt-3 w-full text-center text-xs"
+          style={{ color: 'var(--text-faint)' }}
+        >
+          Forgot password?
+        </button>
+        {showForgot && (
+          <p className="mt-2 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+            Ask your mail admin to reset it from the admin dashboard's Mailboxes tab.
+          </p>
+        )}
       </form>
     </div>
   )

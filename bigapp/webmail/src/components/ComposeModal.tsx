@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Minus, Paperclip, Send, ChevronDown, File as FileIcon } from 'lucide-react'
+import { X, Minus, Paperclip, Send, ChevronDown, File as FileIcon, Trash2, Maximize2, Minimize2 } from 'lucide-react'
+import { getComposeStyle, setComposeStyle } from '../settings'
 
 export interface ComposeDraft {
   to: string
@@ -20,6 +21,7 @@ interface ComposeModalProps {
   onClose: () => void
   onSaveDraft: (draft: ComposeDraft) => void
   onSend: (draft: ComposeDraft) => void
+  onDeleteDraft?: (draft: ComposeDraft) => void
   primaryEmail: string
   aliases: string[]
 }
@@ -30,12 +32,28 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, primaryEmail, aliases }: ComposeModalProps) {
+export function ComposeModal({
+  initialDraft,
+  onClose,
+  onSaveDraft,
+  onSend,
+  onDeleteDraft,
+  primaryEmail,
+  aliases,
+}: ComposeModalProps) {
   const [draft, setDraft] = useState<ComposeDraft>({ from: primaryEmail, attachments: [], ...initialDraft })
   const [minimized, setMinimized] = useState(false)
+  const [full, setFull] = useState(() => getComposeStyle() === 'full')
   const [showCc, setShowCc] = useState(Boolean(initialDraft.cc || initialDraft.bcc))
   const [sending, setSending] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function toggleFull() {
+    const next = !full
+    setFull(next)
+    setComposeStyle(next ? 'full' : 'popup')
+  }
 
   function handleCloseWithSave() {
     const hasContent = draft.to.trim() || draft.subject.trim() || draft.body.trim() || (draft.attachments?.length ?? 0) > 0
@@ -74,6 +92,16 @@ export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, prima
     }
   }
 
+  async function handleDelete() {
+    if (!onDeleteDraft) return
+    setDeleting(true)
+    try {
+      await onDeleteDraft(draft)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (minimized) {
     return (
       <div
@@ -100,8 +128,13 @@ export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, prima
   }
 
   return (
-    <div className="fixed bottom-0 right-6 z-50 flex w-full max-w-md flex-col overflow-hidden rounded-t-xl border border-b-0 shadow-2xl sm:right-6 sm:w-[440px]"
-      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)', maxHeight: '32rem' }}
+    <div
+      className={
+        full
+          ? 'fixed inset-4 z-50 flex flex-col overflow-hidden rounded-xl border shadow-2xl md:inset-10'
+          : 'fixed bottom-0 right-6 z-50 flex w-full max-w-md flex-col overflow-hidden rounded-t-xl border border-b-0 shadow-2xl sm:right-6 sm:w-[440px]'
+      }
+      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)', maxHeight: full ? undefined : '32rem' }}
     >
       <div
         className="flex items-center justify-between px-4 py-2.5"
@@ -111,6 +144,9 @@ export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, prima
         <div className="flex items-center gap-1">
           <button onClick={() => setMinimized(true)} className="rounded p-1 text-white/90 hover:bg-white/10">
             <Minus size={15} />
+          </button>
+          <button onClick={toggleFull} className="rounded p-1 text-white/90 hover:bg-white/10" title={full ? 'Restore' : 'Maximize'}>
+            {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button onClick={handleCloseWithSave} className="rounded p-1 text-white/90 hover:bg-white/10">
             <X size={16} />
@@ -222,24 +258,37 @@ export function ComposeModal({ initialDraft, onClose, onSaveDraft, onSend, prima
           {sending ? 'Sending…' : 'Send'}
           <Send size={14} />
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            addFiles(e.target.files)
-            e.target.value = ''
-          }}
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          style={{ color: 'var(--text-faint)' }}
-          className="rounded-lg p-2 hover:opacity-80"
-          title="Attach files"
-        >
-          <Paperclip size={17} />
-        </button>
+        <div className="flex items-center gap-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              addFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{ color: 'var(--text-faint)' }}
+            className="rounded-lg p-2 hover:opacity-80"
+            title="Attach files"
+          >
+            <Paperclip size={17} />
+          </button>
+          {onDeleteDraft && draft.draftUid != null && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{ color: 'var(--danger)' }}
+              className="rounded-lg p-2 hover:opacity-80 disabled:opacity-60"
+              title="Delete draft"
+            >
+              <Trash2 size={17} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

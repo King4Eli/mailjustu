@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { MessageList } from './components/MessageList'
@@ -9,6 +9,7 @@ import { Login } from './components/Login'
 import * as api from './api'
 import type { ApiFolder, ApiMessage, ApiAlias } from './api'
 import type { EmailMessage, FolderInfo, MessageFilter } from './types'
+import { getListWidth, setListWidth as persistListWidth, LIST_WIDTH_MIN, LIST_WIDTH_MAX } from './settings'
 
 function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   return {
@@ -52,6 +53,8 @@ export default function App() {
   const [aliases, setAliases] = useState<ApiAlias[]>([])
   const [aliasesOpen, setAliasesOpen] = useState(false)
   const [usage, setUsage] = useState<{ usedBytes: number | null; quotaMb: number | null } | null>(null)
+  const [listWidth, setListWidthState] = useState(() => getListWidth())
+  const resizingRef = useRef(false)
 
   async function loadFolders() {
     try {
@@ -204,6 +207,22 @@ export default function App() {
       if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save draft')
+    }
+  }
+
+  async function handleDeleteDraft(draft: ComposeDraft) {
+    if (draft.draftUid == null || !draft.draftFolder) {
+      setComposeDraft(null)
+      return
+    }
+    try {
+      await api.discardDraft(draft.draftUid, draft.draftFolder)
+      setComposeDraft(null)
+      loadFolders()
+      const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
+      if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete draft')
     }
   }
 
@@ -382,6 +401,33 @@ export default function App() {
     setAliases([])
   }
 
+  function handleResizeStart(e: React.MouseEvent) {
+    e.preventDefault()
+    resizingRef.current = true
+    const startX = e.clientX
+    const startWidth = listWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    function clamp(width: number) {
+      return Math.min(LIST_WIDTH_MAX, Math.max(LIST_WIDTH_MIN, width))
+    }
+    function onMove(moveEvent: MouseEvent) {
+      if (!resizingRef.current) return
+      setListWidthState(clamp(startWidth + (moveEvent.clientX - startX)))
+    }
+    function onUp(upEvent: MouseEvent) {
+      resizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      persistListWidth(clamp(startWidth + (upEvent.clientX - startX)))
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   return (
     <div className="flex h-screen w-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       <Sidebar
@@ -437,8 +483,15 @@ export default function App() {
               folderLabel={loading ? `${folderLabel} · loading…` : folderLabel}
               filter={filter}
               onFilterChange={setFilter}
+              width={listWidth}
             />
           </div>
+
+          <div
+            onMouseDown={handleResizeStart}
+            className="hidden w-1 shrink-0 cursor-col-resize md:block"
+            style={{ background: 'var(--border)' }}
+          />
 
           <div className={`${selectedMessage ? 'flex' : 'hidden md:flex'} min-w-0 flex-1`}>
             <ReadingPane
@@ -468,6 +521,7 @@ export default function App() {
           onClose={() => setComposeDraft(null)}
           onSaveDraft={saveDraft}
           onSend={handleSend}
+          onDeleteDraft={handleDeleteDraft}
           primaryEmail={email}
           aliases={aliases.map((a) => a.source)}
         />

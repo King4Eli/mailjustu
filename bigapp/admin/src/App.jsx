@@ -8,6 +8,7 @@ import {
   Database,
   Globe,
   Inbox,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -200,7 +201,7 @@ function ConfirmDeleteModal({ title, message, confirmText, onConfirm, onCancel }
   )
 }
 
-function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) {
+function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin, onResetPassword }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
@@ -258,11 +259,11 @@ function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) 
       {error && <p className="token-error">{error}</p>}
 
       <div className="service-table" style={{ marginTop: 20 }}>
-        <div className="service-row table-head" style={{ gridTemplateColumns: isSuper ? '1.6fr .8fr 1.2fr .8fr 32px' : '1.6fr .8fr 1.2fr 32px' }}>
-          <span>EMAIL</span><span>CREATED</span><span>STORAGE</span>{isSuper && <span>ADMIN</span>}<span />
+        <div className="service-row table-head" style={{ gridTemplateColumns: isSuper ? '1.6fr .8fr 1.2fr .8fr 32px 32px' : '1.6fr .8fr 1.2fr 32px 32px' }}>
+          <span>EMAIL</span><span>CREATED</span><span>STORAGE</span>{isSuper && <span>ADMIN</span>}<span /><span />
         </div>
         {mailboxes.map((mailbox) => (
-          <div className="service-row" key={mailbox.id} style={{ gridTemplateColumns: isSuper ? '1.6fr .8fr 1.2fr .8fr 32px' : '1.6fr .8fr 1.2fr 32px' }}>
+          <div className="service-row" key={mailbox.id} style={{ gridTemplateColumns: isSuper ? '1.6fr .8fr 1.2fr .8fr 32px 32px' : '1.6fr .8fr 1.2fr 32px 32px' }}>
             <span>{mailbox.email}</span>
             <span>{new Date(mailbox.created_at).toLocaleDateString()}</span>
             <StorageUsage usedBytes={mailbox.storageUsedBytes} quotaMb={mailbox.quota_mb} />
@@ -275,6 +276,14 @@ function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin }) 
                 {mailbox.is_admin ? 'Admin' : '—'}
               </button>
             )}
+            <button
+              className="row-menu"
+              onClick={() => onResetPassword(mailbox.id, mailbox.email)}
+              aria-label={`Reset password for ${mailbox.email}`}
+              title="Reset password"
+            >
+              <KeyRound size={16} />
+            </button>
             <button className="row-menu" onClick={() => setPendingDelete(mailbox)} aria-label={`Delete ${mailbox.email}`}>
               <Trash2 size={16} />
             </button>
@@ -515,6 +524,12 @@ function App() {
     await refresh()
   }
 
+  async function handleResetMailboxPassword(id, email) {
+    const password = window.prompt(`New password for ${email}:`)
+    if (!password) return
+    await api.resetMailboxPassword(id, password)
+  }
+
   async function handleDeleteMailbox(id) {
     await api.deleteMailbox(id)
     await refresh()
@@ -662,6 +677,7 @@ function App() {
               onCreate={handleCreateMailbox}
               onDelete={handleDeleteMailbox}
               onSetAdmin={handleSetMailboxAdmin}
+              onResetPassword={handleResetMailboxPassword}
             />
           )}
 

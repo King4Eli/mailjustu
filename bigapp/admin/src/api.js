@@ -79,6 +79,10 @@ export function setMailboxAdmin(id, isAdmin) {
   return apiFetch(`/admin/mailboxes/${id}`, { method: 'PATCH', body: JSON.stringify({ isAdmin }) })
 }
 
+export function resetMailboxPassword(id, password) {
+  return apiFetch(`/admin/mailboxes/${id}`, { method: 'PATCH', body: JSON.stringify({ password }) })
+}
+
 export function deleteMailbox(id) {
   return apiFetch(`/admin/mailboxes/${id}`, { method: 'DELETE' })
 }

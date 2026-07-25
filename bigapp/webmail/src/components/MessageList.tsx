@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Star, Paperclip } from 'lucide-react'
 import type { EmailMessage, MessageFilter } from '../types'
 import { formatListDate, initials, avatarColor } from '../utils'
@@ -10,6 +11,20 @@ interface MessageListProps {
   folderLabel: string
   filter: MessageFilter
   onFilterChange: (filter: MessageFilter) => void
+  // User-resizable (see App.tsx's drag handle) -- only applied at the md+
+  // breakpoint; below that this column is always full-width.
+  width: number
+}
+
+function useIsMdUp() {
+  const [isMdUp, setIsMdUp] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const handler = () => setIsMdUp(mq.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return isMdUp
 }
 
 const FILTERS: { id: MessageFilter; label: string }[] = [
@@ -28,11 +43,13 @@ export function MessageList({
   folderLabel,
   filter,
   onFilterChange,
+  width,
 }: MessageListProps) {
+  const isMdUp = useIsMdUp()
   return (
     <div
-      className="flex h-full w-full flex-col overflow-hidden border-r md:w-[360px] lg:w-[400px]"
-      style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)' }}
+      className="flex h-full w-full flex-col overflow-hidden border-r"
+      style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)', ...(isMdUp ? { width } : {}) }}
     >
       <div
         className="flex items-center justify-between border-b px-4 py-3"

@@ -1,3 +1,4 @@
+import React from 'react'
 import {
   Star,
   Archive,
@@ -110,7 +111,7 @@ export function ReadingPane({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 py-6">
+        <div className="mx-auto px-6 py-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <h1 className="text-xl font-semibold leading-snug" style={{ color: 'var(--text)' }}>
               {message.subject}
