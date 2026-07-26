@@ -1,0 +1,15 @@
+# Provisioned by setup/postfix-setup.sh into the postfix_config volume's
+# mysql-virtual-alias-maps.cf. This is the readable reference copy -- see
+# schema.sql for virtual_aliases and provision_postfix_maps() in
+# setup/postfix-setup.sh for how it's applied.
+#
+# Postfix's mysql: map files don't support %{env:...}-style expansion (only
+# Dovecot's own config format does -- see dovecot-auth-sql.conf), so these
+# credentials are hardcoded rather than templated. Must match
+# ./.env/api.env's DB_HOST/DB_USER/DB_PASSWORD/DB_NAME -- already a known,
+# tracked duplication (see .todo.txt's "Cleanup / consistency" section).
+hosts = global_mysql
+user = mail_justu_user
+password = mail_justu_password1
+dbname = mail_justu
+query = SELECT destination FROM virtual_aliases WHERE source='%s'

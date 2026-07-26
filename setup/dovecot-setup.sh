@@ -4,8 +4,12 @@
 # auth config into the dovecot_config volume -- without it the volume only
 # has the base image's stock conf.d/auth.conf (passdb static, keyed off a
 # USER_PASSWORD env var nothing ever sets -- unmatchable, login always
-# fails). See dovecot-auth.conf / dovecot-auth-sql.conf for the reference
-# copies this writes in.
+# fails). It also adds a plain LMTP listener (dovecot-lmtp.conf) -- the
+# image only ships an implicit-TLS `lmtps` one, but Postfix's
+# virtual_transport talks plain LMTP, so mail delivery deferred forever
+# with "Connection refused" without this. See dovecot-auth.conf /
+# dovecot-auth-sql.conf / dovecot-lmtp.conf for the reference copies this
+# writes in.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source ./setup/common.sh
@@ -32,10 +36,12 @@ provision_dovecot_auth() {
     -v mail_justu_dovecot_config:/target \
     -v "$PWD/dovecot-auth.conf:/src/auth.conf:ro" \
     -v "$PWD/dovecot-auth-sql.conf:/src/auth-sql.conf:ro" \
+    -v "$PWD/dovecot-lmtp.conf:/src/lmtp.conf:ro" \
     busybox sh -c '
       mkdir -p /target/conf.d &&
       cp /src/auth.conf /target/conf.d/auth.conf &&
-      cp /src/auth-sql.conf /target/conf.d/auth-sql.conf
+      cp /src/auth-sql.conf /target/conf.d/auth-sql.conf &&
+      cp /src/lmtp.conf /target/conf.d/lmtp.conf
     '
   # docker compose up -d only recreates a container when its compose
   # config changed -- editing conf.d content alone doesn't trigger that,

@@ -90,10 +90,11 @@ docker compose "${COMPOSE_FILES[@]}" "${UP_ARGS[@]}"
 
 # Must run after `up -d` -- see provision_dovecot_auth() in
 # setup/dovecot-setup.sh for why the ordering matters (it needs the
-# dovecot_config volume to already have the image's own default files
-# seeded into it, which only happens on mail_justu_dovecot's own first
-# boot against an empty volume).
+# dovecot_config/postfix_config volumes to already have each image's own
+# default files seeded into them, which only happens on each container's
+# own first boot against an empty volume).
 provision_dovecot_auth
+provision_postfix_maps
 
 log "Waiting for services to come up"
 deadline=$((SECONDS + 90))
