@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Checks .env/server.env + .env/api.env exist, keeps DOVEADM_PASSWORD in
-# sync from .env/dovecot.env (edit it there, not in api.env), and checks
-# global_mysql reachability.
+# Checks .env/server.env + .env/api.env exist, and global_mysql reachability.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source ./setup/common.sh
@@ -9,8 +7,6 @@ source ./setup/common.sh
 setup_server_env() {
   require_env .env/server.env
   require_env .env/api.env
-  require_env .env/dovecot.env
-  sync_env_value .env/api.env DOVEADM_PASSWORD "$(env_value .env/dovecot.env DOVEADM_PASSWORD)"
 }
 
 setup_server_mysql() {

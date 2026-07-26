@@ -5,7 +5,7 @@ services:
   mail_justu_postfix:
     image: boky/postfix
     container_name: mail_justu_postfix
-    hostname: mail.suyoapp.com
+    hostname: ${MAIL_HOSTNAME}
     restart: unless-stopped
     env_file:
       - ./.env/postfix.env
@@ -55,6 +55,9 @@ services:
     env_file:
       - ./.env/api.env
       - ./.env/server.env
+      # DOVEADM_PASSWORD only -- loaded straight from dovecot's own env
+      # file so there's exactly one copy, not a second one to keep in sync.
+      - ./.env/dovecot.env
     depends_on:
       mail_justu_postfix:
         condition: service_started

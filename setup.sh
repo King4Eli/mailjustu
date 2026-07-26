@@ -6,10 +6,11 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+MODE=dev
 WITH_RSPAMD=true
 WITH_OPENDKIM=true
 WITH_CLAMAV=true
-DO_BUILD=true
+DO_BUILD=false
 ASSUME_YES=false
 BOOTSTRAP_ADMIN=false
 
@@ -17,11 +18,18 @@ usage() {
   cat <<'EOF'
 Usage: ./setup.sh [options]
 
+  --dev                  (default) Include docker-compose.override.yml --
+                          dev-only bind mounts under ./volumes, builds
+                          mail_justu_server from ./bigapp (add --build to
+                          actually rebuild it), publishes :4001
+  --prod                  Skip the override -- pulls the published
+                          mail_justu_server image, no host bind mounts
+  --build                 Rebuild the server image (default: use whatever
+                          image already exists/is pulled)
   --minimal              Base stack only -- skip rspamd, opendkim, clamav
   --no-rspamd             Skip the rspamd/redis overlay
   --no-opendkim           Skip the opendkim overlay
   --no-clamav             Skip the clamav overlay
-  --no-build              Don't rebuild the server image
   --bootstrap-admin       Create/reset the super admin after startup,
                           using SUPER_ADMIN_EMAILS / SUPER_ADMIN_PASSWORD
                           from .env/api.env
@@ -32,11 +40,13 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --dev) MODE=dev; shift ;;
+    --prod) MODE=prod; shift ;;
+    --build) DO_BUILD=true; shift ;;
     --minimal) WITH_RSPAMD=false; WITH_OPENDKIM=false; WITH_CLAMAV=false; shift ;;
     --no-rspamd) WITH_RSPAMD=false; shift ;;
     --no-opendkim) WITH_OPENDKIM=false; shift ;;
     --no-clamav) WITH_CLAMAV=false; shift ;;
-    --no-build) DO_BUILD=false; shift ;;
     --bootstrap-admin) BOOTSTRAP_ADMIN=true; shift ;;
     -y|--yes) ASSUME_YES=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -63,7 +73,12 @@ confirm "Have you personalized .env/*.env for this server (domain, hostname, adm
 
 setup_server_mysql
 
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.override.yml)
+# --env-file makes docker-compose.yml's ${MAIL_HOSTNAME} etc. resolve --
+# there's no root .env file for compose to find automatically (.env/ is a
+# directory of per-service files), so this must be explicit everywhere
+# compose is invoked, not just here.
+COMPOSE_FILES=(--env-file .env/api.env -f docker-compose.yml)
+[[ "$MODE" == dev ]] && COMPOSE_FILES+=(-f docker-compose.override.yml)
 $WITH_RSPAMD   && COMPOSE_FILES+=(-f docker-compose.rspamd.yml)
 $WITH_OPENDKIM && COMPOSE_FILES+=(-f docker-compose.opendkim.yml)
 $WITH_CLAMAV   && COMPOSE_FILES+=(-f docker-compose.clamav.yml)
@@ -93,7 +108,8 @@ fi
 
 log "Done"
 cat <<EOF
-Webmail / Admin / API:  http://localhost:4001  (/webmail, /admin, /api)
+Mode:                   $MODE
+$([[ "$MODE" == dev ]] && echo "Webmail / Admin / API:  http://localhost:4001  (/webmail, /admin, /api)" || echo "Webmail / Admin / API:  mail_justu_server:80 (internal only -- put a reverse proxy in front)")
 SMTP:                   25, 465, 587
 IMAP:                   143, 993
 $($WITH_RSPAMD && echo "Rspamd controller:      http://localhost:11334")

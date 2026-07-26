@@ -17,12 +17,3 @@ require_env() {
 }
 
 env_value() { grep "^${2}=" "$1" | cut -d= -f2-; }
-
-# sync_env_value FILE KEY VALUE -- overwrites an existing KEY=... line in
-# FILE in place. Used to keep a value that must match another file
-# (secrets shared across two containers) from needing manual dual-editing.
-sync_env_value() {
-  local file="$1" key="$2" value="$3"
-  grep -q "^${key}=" "$file" || die "$file has no ${key}= line to sync"
-  sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-}

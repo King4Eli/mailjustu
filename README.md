@@ -18,7 +18,16 @@ adds dev-only ports and bind-mounts each service's config under
 `./volumes` so it's visible and editable on the host.
 
 ```bash
-docker compose up -d
+./setup.sh
+```
+
+Or invoke compose directly -- `--env-file .env/api.env` is required
+(not optional) since `docker-compose.yml` reads `${MAIL_HOSTNAME}` from it
+and there's no root `.env` file for compose to find automatically (`.env/`
+here is a directory of per-service files, not compose's own `.env`):
+
+```bash
+docker compose --env-file .env/api.env up -d
 ```
 
 Everything else is opt-in, one file per concern:
@@ -33,6 +42,7 @@ Layer in whichever you want with `-f`:
 
 ```bash
 docker compose \
+  --env-file .env/api.env \
   -f docker-compose.yml \
   -f docker-compose.override.yml \
   -f docker-compose.rspamd.yml \
@@ -46,7 +56,7 @@ the Rspamd and OpenDKIM milters if they're running; if you don't include
 those files, Postfix just skips them (`milter_default_action=accept`).
 
 For a production deploy, skip the dev override and supply your own:
-`docker compose -f docker-compose.yml -f docker-compose.<yours>.yml up -d`.
+`docker compose --env-file .env/api.env -f docker-compose.yml -f docker-compose.<yours>.yml up -d`.
 
 ## Mailboxes are real accounts
 
