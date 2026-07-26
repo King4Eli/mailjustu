@@ -11,7 +11,7 @@ setup_rspamd() {
   require_env .env/rspamd.env
   require_env .env/api.env
 
-  docker inspect -f '{{.State.Running}}' mail_justu_rspamd 2>/dev/null | grep -q true || return 0
+  docker inspect -f '{{.State.Running}}' mail-rspamd 2>/dev/null | grep -q true || return 0
 
   local port password
   port="$(env_value .env/api.env RSPAMD_PORT)"
@@ -19,7 +19,7 @@ setup_rspamd() {
   if curl -sf -o /dev/null -H "Password: ${password}" "http://localhost:${port}/stat"; then
     echo "rspamd controller password OK"
   else
-    warn "RSPAMD_CONTROLLER_PASSWORD in .env/api.env doesn't authenticate against the running rspamd -- edit /etc/rspamd/local.d/worker-controller.inc in the rspamd_config volume (docker exec mail_justu_rspamd) to match, or vice versa"
+    warn "RSPAMD_CONTROLLER_PASSWORD in .env/api.env doesn't authenticate against the running rspamd -- edit /etc/rspamd/local.d/worker-controller.inc in the rspamd_config volume (docker exec mail-rspamd) to match, or vice versa"
   fi
 }
 
