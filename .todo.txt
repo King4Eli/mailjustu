@@ -1,18 +1,28 @@
-### Blocked on a real, owned domain (see full detail further down)
->>> DKIM DNS TXT record, MAIL_HOSTNAME/MAIL_PUBLIC_IP, real TLS certs, then
-    tighten smtp_tls_security_level from `may` to `encrypt`.
+### Domain is now real (suyoapp.com) -- config side is done, DNS/infra side isn't
+>>> Publish the DNS records below, set up PTR, confirm outbound port 25 isn't
+    blocked, then create the suyoapp.com domain/mailbox in the DB. Real TLS
+    certs are a separate follow-up, then tighten smtp_tls_security_level
+    from `may` to `encrypt`.
 
 
-## Needs a real, owned domain + DNS (can't be completed against the
-## mail.example.com placeholder, not a code problem)
-- DKIM signing works end to end (Mode "sv", confirmed by sending real
-  mail and checking the delivered DKIM-Signature header) but the
-  <selector>._domainkey.<domain> TXT record can't be published -- see
-  the opendkim_config volume's /etc/opendkim/keys/mail.txt for the record content once you have
-  a real domain.
-- MAIL_HOSTNAME/MAIL_PUBLIC_IP in ./.env/api.env are still placeholders,
-  so the admin dashboard's generated MX/A/SPF/DMARC records are
-  structurally correct but point nowhere.
+## Real domain (suyoapp.com) is wired into config; DNS/infra still needed
+- DKIM signing works end to end (Mode "sv", selector "mail", key regenerated
+  for suyoapp.com -- see the opendkim_config volume's
+  /etc/opendkim/keys/mail.txt for the current record). Postfix hostname,
+  ALLOWED_SENDER_DOMAINS, MAIL_HOSTNAME/MAIL_HOST all updated to match
+  (mail.suyoapp.com / suyoapp.com). MAIL_PUBLIC_IP in ./.env/api.env is set
+  to 168.231.67.172, inferred from .env/deploy.json's ssh target -- confirm
+  that's actually the box before trusting the generated A/MX records.
+  Still needed before mail actually flows:
+    - Publish DNS: A (mail.suyoapp.com), MX (suyoapp.com -> mail.suyoapp.com),
+      SPF/DMARC TXT, and the DKIM TXT record above.
+    - PTR (reverse DNS) for the server IP -> mail.suyoapp.com, set at the
+      hosting provider, not in the DNS zone.
+    - Confirm the host doesn't block outbound port 25 (common on VPS/cloud
+      providers by default).
+    - Create a suyoapp.com virtual_domains row + at least one mailbox --
+      nothing can send @suyoapp.com mail until one exists (existing test
+      mailboxes are still on the mail.example.com placeholder domain).
 - TLS certs under the certs and dovecot_config named volumes are whatever
   self-signed cert shipped in the base images. Replace with real certs
   (Let's Encrypt or otherwise), then tighten Postfix's

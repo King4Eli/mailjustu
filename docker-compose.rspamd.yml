@@ -41,6 +41,9 @@ services:
     networks:
       - mail_justu_network
 
+networks:
+  mail_justu_network:
+    driver: bridge
 volumes:
   rspamd_data:
   rspamd_config:

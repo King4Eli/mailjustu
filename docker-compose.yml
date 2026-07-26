@@ -5,7 +5,7 @@ services:
   mail_justu_postfix:
     image: boky/postfix
     container_name: mail_justu_postfix
-    hostname: mail.example.com
+    hostname: mail.suyoapp.com
     restart: unless-stopped
     env_file:
       - ./.env/postfix.env

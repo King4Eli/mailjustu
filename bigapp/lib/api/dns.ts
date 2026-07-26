@@ -6,6 +6,8 @@
 export function buildDnsRecords(domain: string) {
   const hostname = process.env.MAIL_HOSTNAME || 'mail.example.com'
   const publicIp = process.env.MAIL_PUBLIC_IP || 'YOUR_SERVER_PUBLIC_IP'
+  const dkimSelector = process.env.DKIM_SELECTOR || 'mail'
+  const dkimPublicKey = process.env.DKIM_PUBLIC_KEY
 
   return [
     {
@@ -32,12 +34,20 @@ export function buildDnsRecords(domain: string) {
       name: `_dmarc.${domain}`,
       value: `"v=DMARC1; p=none; rua=mailto:postmaster@${domain}"`,
     },
-    {
-      purpose:
-        'DKIM -- not yet available: OpenDKIM runs in verify-only mode in this stack (see .todo.txt). Generate a real keypair and switch it to signing mode before this record means anything.',
-      type: 'TXT',
-      name: `<selector>._domainkey.${domain}`,
-      value: '(not generated yet)',
-    },
+    dkimPublicKey
+      ? {
+          purpose:
+            'DKIM -- proves mail claiming to be from this domain was actually signed by this server',
+          type: 'TXT',
+          name: `${dkimSelector}._domainkey.${domain}`,
+          value: `"${dkimPublicKey}"`,
+        }
+      : {
+          purpose:
+            'DKIM -- not yet available: no signing key configured (set DKIM_SELECTOR/DKIM_PUBLIC_KEY in ./.env/api.env, see the opendkim_config volume\'s keys/<selector>.txt).',
+          type: 'TXT',
+          name: `<selector>._domainkey.${domain}`,
+          value: '(not generated yet)',
+        },
   ]
 }
