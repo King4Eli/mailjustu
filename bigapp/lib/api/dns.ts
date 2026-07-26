@@ -1,13 +1,11 @@
-// Generates copy-pasteable DNS records for a newly hosted domain. We don't
-// know the real public IP/hostname of wherever this stack ends up running,
-// so MAIL_HOSTNAME/MAIL_PUBLIC_IP are placeholders until set in
-// ./.env/api.env -- the records are still structurally correct, just need
-// the placeholder swapped for the real value.
-export function buildDnsRecords(domain: string) {
+// Generates copy-pasteable DNS records for a newly hosted domain.
+// MAIL_HOSTNAME/MAIL_PUBLIC_IP fall back to placeholders until set in
+// ./.env/api.env. dkim is null only for domains predating DKIM support.
+export function buildDnsRecords(domain: string, dkim: { selector: string; publicKey: string } | null) {
   const hostname = process.env.MAIL_HOSTNAME || 'mail.example.com'
   const publicIp = process.env.MAIL_PUBLIC_IP || 'YOUR_SERVER_PUBLIC_IP'
-  const dkimSelector = process.env.DKIM_SELECTOR || 'mail'
-  const dkimPublicKey = process.env.DKIM_PUBLIC_KEY
+  const dkimSelector = dkim?.selector
+  const dkimPublicKey = dkim?.publicKey
 
   return [
     {
@@ -43,10 +41,9 @@ export function buildDnsRecords(domain: string) {
           value: `"${dkimPublicKey}"`,
         }
       : {
-          purpose:
-            'DKIM -- not yet available: no signing key configured (set DKIM_SELECTOR/DKIM_PUBLIC_KEY in ./.env/api.env, see the opendkim_config volume\'s keys/<selector>.txt).',
+          purpose: 'DKIM -- no signing key on this domain (it predates DKIM support; recreate it to get one)',
           type: 'TXT',
-          name: `<selector>._domainkey.${domain}`,
+          name: `mail._domainkey.${domain}`,
           value: '(not generated yet)',
         },
   ]
