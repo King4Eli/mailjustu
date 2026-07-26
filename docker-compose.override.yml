@@ -6,3 +6,29 @@ services:
       context: ./bigapp
     ports:
       - "4001:80"
+
+volumes:
+  dovecot_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/volumes/dovecot_config
+  vmail_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/volumes/vmail_data
+  var_mail:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/volumes/var_mail
+  certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/volumes/certs
