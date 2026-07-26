@@ -29,9 +29,7 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env/dovecot.env
-      # DB_HOST/DB_USER/DB_PASSWORD/DB_NAME only -- auth-sql.conf's SQL
-      # passdb/userdb needs these to query virtual_users; loaded straight
-      # from api/'s own env file so there's exactly one copy.
+      # DB_* only, for auth.conf's SQL passdb/userdb (virtual_users lookup)
       - ./.env/api.env
     # Named volumes throughout, no host bind mounts -- see
     # mail_justu_postfix above. vmail_data is the actual mailbox storage

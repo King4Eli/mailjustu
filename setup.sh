@@ -59,7 +59,8 @@ for f in ./setup/*.sh; do source "$f"; done
 log "Checking dependencies"
 command -v docker >/dev/null 2>&1 || die "docker is required but not found"
 docker compose version >/dev/null 2>&1 || die "docker compose (v2 plugin) is required but not found"
-echo "docker + docker compose OK"
+command -v envsubst >/dev/null 2>&1 || die "envsubst (gettext) is required but not found"
+echo "docker + docker compose + envsubst OK"
 
 setup_network
 
@@ -88,11 +89,8 @@ UP_ARGS=(up -d)
 $DO_BUILD && UP_ARGS+=(--build)
 docker compose "${COMPOSE_FILES[@]}" "${UP_ARGS[@]}"
 
-# Must run after `up -d` -- see provision_dovecot_auth() in
-# setup/dovecot-setup.sh for why the ordering matters (it needs the
-# dovecot_config/postfix_config volumes to already have each image's own
-# default files seeded into them, which only happens on each container's
-# own first boot against an empty volume).
+# Must run after `up -d` -- these volumes need each image's own defaults
+# seeded first (happens on first boot), or the container can't start.
 provision_dovecot_auth
 provision_postfix_maps
 
