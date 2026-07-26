@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
-# Checks .env/dovecot.env exists, and provisions Dovecot's auth config into
-# the dovecot_config volume -- that volume starts empty (no bind mount, no
-# seed step in the base dovecot image), so without this, login silently
-# never works on a fresh server. See dovecot-auth.conf / dovecot-auth-sql.conf
-# for the reference copies this writes in.
+# Checks .env/dovecot.env exists. provision_dovecot_auth() (called from
+# setup.sh, AFTER `docker compose up -d`, not here) writes Dovecot's real
+# auth config into the dovecot_config volume -- without it the volume only
+# has the base image's stock conf.d/auth.conf (passdb static, keyed off a
+# USER_PASSWORD env var nothing ever sets -- unmatchable, login always
+# fails). See dovecot-auth.conf / dovecot-auth-sql.conf for the reference
+# copies this writes in.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source ./setup/common.sh
 
-setup_dovecot() {
-  require_env .env/dovecot.env
-  provision_dovecot_auth
-}
+setup_dovecot() { require_env .env/dovecot.env; }
 
-# Always overwrites -- these files are templated from env, not hand-tuned
-# per-server, so re-running is expected to keep the volume in sync.
+# Must run AFTER the dovecot_config volume already has the image's default
+# files in it (i.e. after `docker compose up -d` has started
+# mail_justu_dovecot at least once) -- on a brand new volume, the image's
+# entrypoint only seeds its defaults (dovecot.conf, vendor.d/, ssl/) when
+# /etc/dovecot is completely empty at boot. Writing conf.d/*.conf into an
+# empty volume *first* makes the entrypoint see a non-empty directory and
+# skip seeding entirely, permanently missing dovecot.conf
+# ("Failed to read configuration: stat(/etc/dovecot/dovecot.conf) failed:
+# No such file or directory", not fixable by re-running this after the
+# fact -- the volume has to be recreated).
+#
+# Always overwrites conf.d/auth*.conf -- these files are templated from
+# env, not hand-tuned per-server, so re-running is expected to keep the
+# volume in sync.
 provision_dovecot_auth() {
   log "Provisioning Dovecot auth config into the dovecot_config volume"
   docker run --rm \
@@ -26,14 +37,11 @@ provision_dovecot_auth() {
       cp /src/auth.conf /target/conf.d/auth.conf &&
       cp /src/auth-sql.conf /target/conf.d/auth-sql.conf
     '
-  # docker compose up -d (later in setup.sh) only recreates a container
-  # when its compose config changed -- editing conf.d content alone
-  # doesn't trigger that, so if dovecot's already running, restart it here
-  # to actually pick up the change.
-  if docker inspect mail_justu_dovecot >/dev/null 2>&1; then
-    docker restart mail_justu_dovecot >/dev/null
-    echo "mail_justu_dovecot restarted to pick up auth config"
-  fi
+  # docker compose up -d only recreates a container when its compose
+  # config changed -- editing conf.d content alone doesn't trigger that,
+  # so restart here to actually pick up the change.
+  docker restart mail_justu_dovecot >/dev/null
+  echo "mail_justu_dovecot restarted to pick up auth config"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -88,6 +88,13 @@ UP_ARGS=(up -d)
 $DO_BUILD && UP_ARGS+=(--build)
 docker compose "${COMPOSE_FILES[@]}" "${UP_ARGS[@]}"
 
+# Must run after `up -d` -- see provision_dovecot_auth() in
+# setup/dovecot-setup.sh for why the ordering matters (it needs the
+# dovecot_config volume to already have the image's own default files
+# seeded into it, which only happens on mail_justu_dovecot's own first
+# boot against an empty volume).
+provision_dovecot_auth
+
 log "Waiting for services to come up"
 deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
