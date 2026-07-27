@@ -32,7 +32,19 @@ InternalHosts           ${CONF_DIR}/TrustedHosts
 ExternalIgnoreList      ${CONF_DIR}/TrustedHosts
 `
   fs.writeFileSync('/etc/opendkim/opendkim.conf', patched)
-  fs.writeFileSync(path.join(CONF_DIR, 'TrustedHosts'), '127.0.0.1\n::1\nmail_justu_postfix\n')
+  // OpenDKIM decides sign-vs-verify by the connecting client's IP, so
+  // mail_justu_server (the only real source of outbound app mail) has to
+  // be covered here or nothing ever gets signed. Hostnames don't work
+  // reliably for this -- OpenDKIM logs the client as
+  // "mail_justu_server.mail_justu_mail_justu_network", the Docker
+  // DNS name, not the bare hostname, so a literal "mail_justu_server"
+  // entry never matches. Same RFC1918 ranges as MYNETWORKS in
+  // .env/postfix.env -- covers any Docker bridge subnet regardless of
+  // which /16 it's actually allocated.
+  fs.writeFileSync(
+    path.join(CONF_DIR, 'TrustedHosts'),
+    '127.0.0.1\n::1\n10.0.0.0/8\n172.16.0.0/12\n192.168.0.0/16\n',
+  )
 }
 
 function findOpendkimPid() {
