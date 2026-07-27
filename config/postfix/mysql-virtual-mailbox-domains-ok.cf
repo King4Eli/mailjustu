@@ -1,0 +1,12 @@
+# Provisioned into the postfix_config volume by setup/postfix-setup.sh.
+# Used by check_recipient_access (see .env/postfix.env) instead of
+# reject_unauth_destination -- Postfix's proxymap daemon refuses the plain
+# mysql-virtual-mailbox-domains.cf table for that check ("unapproved
+# table"), so this returns a literal 'OK' instead of the domain name,
+# sidestepping proxymap the same way check_sender_access/allowed_senders
+# already does.
+hosts = ${DB_HOST}
+user = ${DB_USER}
+password = ${DB_PASSWORD}
+dbname = ${DB_NAME}
+query = SELECT 'OK' FROM virtual_domains WHERE name='%s'

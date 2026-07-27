@@ -22,13 +22,13 @@ provision_postfix_maps() {
   DB_PASSWORD="$(env_value .env/api.env DB_PASSWORD)"
   DB_NAME="$(env_value .env/api.env DB_NAME)"
 
-  for f in mysql-virtual-mailbox-domains mysql-virtual-mailbox-maps mysql-virtual-alias-maps; do
+  for f in mysql-virtual-mailbox-domains mysql-virtual-mailbox-maps mysql-virtual-alias-maps mysql-virtual-mailbox-domains-ok; do
     envsubst '${DB_HOST} ${DB_USER} ${DB_PASSWORD} ${DB_NAME}' \
       < "config/postfix/$f.cf" > "$tmp/$f.cf"
   done
 
   docker run --rm -v mail_justu_postfix_config:/target -v "$tmp:/src:ro" \
-    busybox sh -c 'cp /src/mysql-virtual-mailbox-domains.cf /src/mysql-virtual-mailbox-maps.cf /src/mysql-virtual-alias-maps.cf /target/'
+    busybox sh -c 'cp /src/mysql-virtual-mailbox-domains.cf /src/mysql-virtual-mailbox-maps.cf /src/mysql-virtual-alias-maps.cf /src/mysql-virtual-mailbox-domains-ok.cf /target/'
   docker restart mail_justu_postfix >/dev/null
 }
 
