@@ -93,6 +93,7 @@ docker compose "${COMPOSE_FILES[@]}" "${UP_ARGS[@]}"
 # seeded first (happens on first boot), or the container can't start.
 provision_dovecot_auth
 provision_postfix_maps
+$WITH_CLAMAV && provision_clamav_milter
 
 log "Waiting for services to come up"
 deadline=$((SECONDS + 90))
