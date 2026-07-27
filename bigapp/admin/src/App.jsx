@@ -6,6 +6,8 @@ import {
   Clock3,
   Copy,
   Database,
+  Eye,
+  EyeOff,
   Globe,
   Inbox,
   KeyRound,
@@ -20,6 +22,7 @@ import {
   Server,
   ShieldCheck,
   ShieldX,
+  Shuffle,
   Trash2,
   Users,
   X,
@@ -201,9 +204,17 @@ function ConfirmDeleteModal({ title, message, confirmText, onConfirm, onCancel }
   )
 }
 
+const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
+
+function generatePassword(length = 16) {
+  const values = crypto.getRandomValues(new Uint32Array(length))
+  return Array.from(values, (v) => PASSWORD_CHARS[v % PASSWORD_CHARS.length]).join('')
+}
+
 function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin, onResetPassword }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -217,6 +228,7 @@ function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin, on
       await onCreate(email.trim(), password, isAdmin)
       setEmail('')
       setPassword('')
+      setShowPassword(false)
       setIsAdmin(false)
     } catch (err) {
       setError(err.message)
@@ -239,13 +251,36 @@ function MailboxesPanel({ mailboxes, isSuper, onCreate, onDelete, onSetAdmin, on
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <input
-          type="password"
-          required
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="password-field">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            required
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="button"
+            className="row-menu"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            title={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          <button
+            type="button"
+            className="row-menu"
+            onClick={() => {
+              setPassword(generatePassword())
+              setShowPassword(true)
+            }}
+            aria-label="Generate random password"
+            title="Generate random password"
+          >
+            <Shuffle size={16} />
+          </button>
+        </div>
         {isSuper && (
           <label className="admin-checkbox">
             <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
@@ -339,7 +374,61 @@ function DnsRecords({ records }) {
   )
 }
 
-function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete }) {
+function EditLimitsForm({ domain, defaults, onSave }) {
+  const [maxMailboxes, setMaxMailboxes] = useState(domain.max_mailboxes ?? '')
+  const [maxAliases, setMaxAliases] = useState(domain.max_aliases_per_mailbox ?? '')
+  const [quotaMb, setQuotaMb] = useState(domain.quota_mb ?? '')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setError('')
+    setBusy(true)
+    try {
+      await onSave(maxMailboxes, maxAliases, quotaMb)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSave} className="mailbox-form" style={{ marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
+      <input
+        type="number"
+        min="0"
+        placeholder={`Max mailboxes (default ${defaults?.maxMailboxesPerDomain ?? '∞'})`}
+        value={maxMailboxes}
+        onChange={(e) => setMaxMailboxes(e.target.value)}
+        style={{ maxWidth: 190 }}
+      />
+      <input
+        type="number"
+        min="0"
+        placeholder={`Max aliases/mailbox (default ${defaults?.maxAliasesPerMailbox ?? '∞'})`}
+        value={maxAliases}
+        onChange={(e) => setMaxAliases(e.target.value)}
+        style={{ maxWidth: 190 }}
+      />
+      <input
+        type="number"
+        min="0"
+        placeholder={`Quota MB/mailbox (default ${defaults?.quotaMb ?? '∞'})`}
+        value={quotaMb}
+        onChange={(e) => setQuotaMb(e.target.value)}
+        style={{ maxWidth: 190 }}
+      />
+      <button type="submit" className="refresh" disabled={busy}>
+        {busy ? 'Saving…' : 'Save limits'}
+      </button>
+      {error && <p className="token-error">{error}</p>}
+    </form>
+  )
+}
+
+function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete, onUpdateLimits }) {
   const [name, setName] = useState('')
   const [maxMailboxes, setMaxMailboxes] = useState('')
   const [maxAliases, setMaxAliases] = useState('')
@@ -437,7 +526,18 @@ function DomainsPanel({ domains, defaults, isSuper, onCreate, onDelete }) {
                 <span />
               )}
             </div>
-            {expanded === domain.id && <DnsRecords records={domain.dnsRecords} />}
+            {expanded === domain.id && (
+              <>
+                <DnsRecords records={domain.dnsRecords} />
+                {isSuper && (
+                  <EditLimitsForm
+                    domain={domain}
+                    defaults={defaults}
+                    onSave={(mb, ma, q) => onUpdateLimits(domain.id, mb, ma, q)}
+                  />
+                )}
+              </>
+            )}
           </div>
         ))}
         {domains.length === 0 && <div className="empty">No domains yet.</div>}
@@ -542,6 +642,11 @@ function App() {
 
   async function handleDeleteDomain(id) {
     await api.deleteDomain(id)
+    await refresh()
+  }
+
+  async function handleUpdateDomainLimits(id, maxMailboxes, maxAliasesPerMailbox, quotaMb) {
+    await api.updateDomainLimits(id, maxMailboxes, maxAliasesPerMailbox, quotaMb)
     await refresh()
   }
 
@@ -682,7 +787,14 @@ function App() {
           )}
 
           {active === 'Domains' && (
-            <DomainsPanel domains={domains} defaults={domainDefaults} isSuper={isSuper} onCreate={handleCreateDomain} onDelete={handleDeleteDomain} />
+            <DomainsPanel
+              domains={domains}
+              defaults={domainDefaults}
+              isSuper={isSuper}
+              onCreate={handleCreateDomain}
+              onDelete={handleDeleteDomain}
+              onUpdateLimits={handleUpdateDomainLimits}
+            />
           )}
         </div>
       </main>

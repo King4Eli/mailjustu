@@ -1,3 +1,40 @@
+import type { EmailMessage } from './types'
+
+// Merges Inbox + Sent into conversations so a reply shows up as an update
+// to the same thread instead of a disconnected new item in Sent (and vice
+// versa for incoming replies to something you sent). A thread only
+// surfaces here if at least one of its messages actually lives in Inbox --
+// a thread you started that nobody replied to yet stays in Sent only.
+export function buildInboxThreads(inboxMessages: EmailMessage[], sentMessages: EmailMessage[]): EmailMessage[] {
+  const inboxSet = new Set(inboxMessages)
+  const byThread = new Map<string, EmailMessage[]>()
+  const standalone: EmailMessage[] = []
+
+  for (const m of [...inboxMessages, ...sentMessages]) {
+    if (!m.threadId) {
+      standalone.push(m)
+      continue
+    }
+    const list = byThread.get(m.threadId)
+    if (list) list.push(m)
+    else byThread.set(m.threadId, [m])
+  }
+
+  const result: EmailMessage[] = standalone.filter((m) => inboxSet.has(m))
+
+  for (const group of byThread.values()) {
+    if (!group.some((m) => inboxSet.has(m))) continue
+    if (group.length === 1) {
+      result.push(group[0])
+      continue
+    }
+    const sorted = [...group].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    result.push({ ...sorted[sorted.length - 1], threadMessages: sorted })
+  }
+
+  return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+}
+
 export function formatListDate(iso: string): string {
   const date = new Date(iso)
   const now = new Date()

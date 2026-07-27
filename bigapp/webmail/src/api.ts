@@ -101,7 +101,12 @@ export interface ApiMessage {
   starred: boolean
   preview?: string
   body?: string
+  html?: string
   attachments?: { index: number; name: string; size: string }[]
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+  threadId?: string
 }
 
 export function getMessages(folder: string): Promise<{ folder: string; messages: ApiMessage[] }> {
@@ -173,6 +178,8 @@ export function sendMail(opts: {
   body: string
   from?: string
   attachments?: File[]
+  inReplyTo?: string
+  references?: string[]
 }) {
   const form = new FormData()
   form.set('to', opts.to)
@@ -181,6 +188,8 @@ export function sendMail(opts: {
   form.set('subject', opts.subject)
   form.set('body', opts.body)
   if (opts.from) form.set('from', opts.from)
+  if (opts.inReplyTo) form.set('inReplyTo', opts.inReplyTo)
+  if (opts.references && opts.references.length > 0) form.set('references', opts.references.join(' '))
   for (const file of opts.attachments || []) form.append('attachments', file)
   return apiFetch('/mail/send', { method: 'POST', body: form })
 }

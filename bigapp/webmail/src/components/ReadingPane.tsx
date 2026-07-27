@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Star,
   Archive,
@@ -13,9 +13,109 @@ import {
   FolderInput,
   Mail,
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import type { EmailMessage, FolderInfo } from '../types'
 import { formatFullDate, initials, avatarColor } from '../utils'
+
+function MessageBody({ message }: { message: EmailMessage }) {
+  if (message.html) {
+    return (
+      <div
+        className="mail-html-body mt-4 text-sm leading-relaxed"
+        style={{ color: 'var(--text)' }}
+        dangerouslySetInnerHTML={{ __html: message.html }}
+      />
+    )
+  }
+  return (
+    <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: 'var(--text)' }}>
+      {message.body}
+    </div>
+  )
+}
+
+function AttachmentChips({
+  message,
+  onDownload,
+}: {
+  message: EmailMessage
+  onDownload: (messageId: string, attachmentIndex: number, filename: string) => void
+}) {
+  if (!message.attachments || message.attachments.length === 0) return null
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {message.attachments.map((attachment) => (
+        <button
+          key={attachment.index}
+          onClick={() => onDownload(message.id, attachment.index, attachment.name)}
+          className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition hover:opacity-80"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          title={`Download ${attachment.name}`}
+        >
+          <Paperclip size={14} />
+          <span className="font-medium" style={{ color: 'var(--text)' }}>
+            {attachment.name}
+          </span>
+          <span style={{ color: 'var(--text-faint)' }}>{attachment.size}</span>
+          <Download size={13} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ThreadCard({
+  message,
+  expanded,
+  onToggle,
+  onDownloadAttachment,
+}: {
+  message: EmailMessage
+  expanded: boolean
+  onToggle: () => void
+  onDownloadAttachment: (messageId: string, attachmentIndex: number, filename: string) => void
+}) {
+  return (
+    <div className="mb-3 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+      <button onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        {expanded ? (
+          <ChevronDown size={14} className="shrink-0" style={{ color: 'var(--text-faint)' }} />
+        ) : (
+          <ChevronRight size={14} className="shrink-0" style={{ color: 'var(--text-faint)' }} />
+        )}
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+          style={{ background: avatarColor(message.from.email) }}
+        >
+          {initials(message.from.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              {message.from.name}
+            </span>
+            <span className="shrink-0 text-xs" style={{ color: 'var(--text-faint)' }}>
+              {formatFullDate(message.date)}
+            </span>
+          </div>
+          {!expanded && (
+            <p className="truncate text-xs" style={{ color: 'var(--text-faint)' }}>
+              {message.preview || message.body}
+            </p>
+          )}
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 pl-11">
+          <MessageBody message={message} />
+          <AttachmentChips message={message} onDownload={onDownloadAttachment} />
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface ReadingPaneProps {
   message: EmailMessage | null
@@ -46,6 +146,14 @@ export function ReadingPane({
   onReply,
   onBack,
 }: ReadingPaneProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (message?.threadMessages && message.threadMessages.length > 1) {
+      setExpandedIds(new Set([message.id]))
+    }
+  }, [message?.id, message?.threadMessages])
+
   if (!message) {
     return (
       <div className="hidden flex-1 flex-col items-center justify-center gap-3 md:flex">
@@ -63,6 +171,7 @@ export function ReadingPane({
   }
 
   const movableFolders = folders.filter((f) => f.id !== 'STARRED')
+  const thread = message.threadMessages && message.threadMessages.length > 1 ? message.threadMessages : null
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -125,62 +234,60 @@ export function ReadingPane({
             </button>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-              style={{ background: avatarColor(message.from.email) }}
-            >
-              {initials(message.from.name)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                  {message.from.name}
-                  <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-faint)' }}>
-                    &lt;{message.from.email}&gt;
-                  </span>
-                </span>
-                <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
-                  {formatFullDate(message.date)}
-                </span>
-              </div>
-              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-                to {message.to.join(', ')}
-              </p>
-              {message.cc && message.cc.length > 0 && (
-                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-                  cc {message.cc.join(', ')}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="mt-6 whitespace-pre-wrap text-sm leading-relaxed"
-            style={{ color: 'var(--text)' }}
-          >
-            {message.body}
-          </div>
-
-          {message.attachments && message.attachments.length > 0 && (
-            <div className="mt-6 flex flex-wrap gap-2">
-              {message.attachments.map((attachment) => (
-                <button
-                  key={attachment.index}
-                  onClick={() => onDownloadAttachment(message.id, attachment.index, attachment.name)}
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition hover:opacity-80"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-                  title={`Download ${attachment.name}`}
-                >
-                  <Paperclip size={14} />
-                  <span className="font-medium" style={{ color: 'var(--text)' }}>
-                    {attachment.name}
-                  </span>
-                  <span style={{ color: 'var(--text-faint)' }}>{attachment.size}</span>
-                  <Download size={13} />
-                </button>
+          {thread ? (
+            <div className="mt-2">
+              {thread.map((m) => (
+                <ThreadCard
+                  key={m.id}
+                  message={m}
+                  expanded={expandedIds.has(m.id)}
+                  onToggle={() =>
+                    setExpandedIds((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(m.id)) next.delete(m.id)
+                      else next.add(m.id)
+                      return next
+                    })
+                  }
+                  onDownloadAttachment={onDownloadAttachment}
+                />
               ))}
             </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                  style={{ background: avatarColor(message.from.email) }}
+                >
+                  {initials(message.from.name)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                      {message.from.name}
+                      <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-faint)' }}>
+                        &lt;{message.from.email}&gt;
+                      </span>
+                    </span>
+                    <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                      {formatFullDate(message.date)}
+                    </span>
+                  </div>
+                  <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                    to {message.to.join(', ')}
+                  </p>
+                  {message.cc && message.cc.length > 0 && (
+                    <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                      cc {message.cc.join(', ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <MessageBody message={message} />
+              <AttachmentChips message={message} onDownload={onDownloadAttachment} />
+            </>
           )}
 
           <div className="mt-8 flex gap-2">

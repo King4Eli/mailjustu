@@ -6,10 +6,12 @@ import { ReadingPane } from './components/ReadingPane'
 import { ComposeModal, type ComposeDraft } from './components/ComposeModal'
 import { AliasesModal } from './components/AliasesModal'
 import { Login } from './components/Login'
+import { useToasts, ToastStack } from './components/Toast'
 import * as api from './api'
 import type { ApiFolder, ApiMessage, ApiAlias } from './api'
 import type { EmailMessage, FolderInfo, MessageFilter } from './types'
 import { getListWidth, setListWidth as persistListWidth, LIST_WIDTH_MIN, LIST_WIDTH_MAX } from './settings'
+import { buildInboxThreads } from './utils'
 
 function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   return {
@@ -20,11 +22,16 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
     subject: m.subject,
     preview: m.preview || '',
     body: m.body || '',
+    html: m.html,
     date: m.date,
     read: m.read,
     starred: m.starred,
     attachments: m.attachments,
     sourceFolder,
+    messageId: m.messageId,
+    inReplyTo: m.inReplyTo,
+    references: m.references,
+    threadId: m.threadId,
   }
 }
 
@@ -44,7 +51,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<MessageFilter>('all')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const { toasts, push, dismiss } = useToasts()
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
@@ -68,7 +75,7 @@ export default function App() {
           : [starred, ...mapped]
       setFolders(withStarred)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load folders')
+      push(err instanceof Error ? err.message : 'Failed to load folders')
     }
   }
 
@@ -83,7 +90,6 @@ export default function App() {
 
   async function loadMessages(folderId: string) {
     setLoading(true)
-    setError('')
     try {
       if (folderId === 'STARRED') {
         const realFolders = folders.filter((f) => f.id !== 'STARRED')
@@ -96,15 +102,27 @@ export default function App() {
         const merged = results.flat().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         setMessages(merged)
       } else {
-        const { messages: apiMessages } = await api.getMessages(folderId)
-        setMessages(
-          apiMessages
-            .map((m) => toEmailMessage(m))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-        )
+        const inboxFolder = folders.find((f) => f.icon === '\\Inbox')
+        const sentFolder = folders.find((f) => f.icon === '\\Sent')
+        if (inboxFolder && sentFolder && folderId === inboxFolder.id) {
+          const [inboxRes, sentRes] = await Promise.all([
+            api.getMessages(inboxFolder.id),
+            api.getMessages(sentFolder.id),
+          ])
+          const inboxMessages = inboxRes.messages.map((m) => toEmailMessage(m, inboxFolder.id))
+          const sentMessages = sentRes.messages.map((m) => toEmailMessage(m, sentFolder.id))
+          setMessages(buildInboxThreads(inboxMessages, sentMessages))
+        } else {
+          const { messages: apiMessages } = await api.getMessages(folderId)
+          setMessages(
+            apiMessages
+              .map((m) => toEmailMessage(m))
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+          )
+        }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load messages')
+      push(err instanceof Error ? err.message : 'Failed to load messages')
     } finally {
       setLoading(false)
     }
@@ -183,19 +201,29 @@ export default function App() {
           draftFolder: folder,
         })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load draft')
+        push(err instanceof Error ? err.message : 'Failed to load draft')
       }
       return
     }
     setSelectedId(message.id)
     try {
-      const { message: detail } = await api.getMessage(Number(message.id), folder)
-      const full = toEmailMessage(detail, message.sourceFolder)
-      setSelectedMessage(full)
+      if (message.threadMessages && message.threadMessages.length > 1) {
+        const details = await Promise.all(
+          message.threadMessages.map(async (m) => {
+            const { message: detail } = await api.getMessage(Number(m.id), m.sourceFolder || folder)
+            return toEmailMessage(detail, m.sourceFolder)
+          }),
+        )
+        const sorted = details.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        setSelectedMessage({ ...sorted[sorted.length - 1], threadMessages: sorted })
+      } else {
+        const { message: detail } = await api.getMessage(Number(message.id), folder)
+        setSelectedMessage(toEmailMessage(detail, message.sourceFolder))
+      }
       setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, read: true } : m)))
       loadFolders()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load message')
+      push(err instanceof Error ? err.message : 'Failed to load message')
     }
   }
 
@@ -206,7 +234,7 @@ export default function App() {
       const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
       if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save draft')
+      push(err instanceof Error ? err.message : 'Failed to save draft')
     }
   }
 
@@ -222,7 +250,7 @@ export default function App() {
       const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
       if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete draft')
+      push(err instanceof Error ? err.message : 'Failed to delete draft')
     }
   }
 
@@ -239,7 +267,7 @@ export default function App() {
         setMessages((prev) => prev.filter((m) => m.id !== id))
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update star')
+      push(err instanceof Error ? err.message : 'Failed to update star')
     }
   }
 
@@ -257,7 +285,7 @@ export default function App() {
       await api.moveMessage(Number(id), folder, 'Archive')
       clearSelectionAndRemove(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to archive message')
+      push(err instanceof Error ? err.message : 'Failed to archive message')
     }
   }
 
@@ -268,7 +296,7 @@ export default function App() {
       await api.markAsSpam(Number(id), folder)
       clearSelectionAndRemove(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark as spam')
+      push(err instanceof Error ? err.message : 'Failed to mark as spam')
     }
   }
 
@@ -279,17 +307,25 @@ export default function App() {
       await api.markAsNotSpam(Number(id), folder)
       clearSelectionAndRemove(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark as not spam')
+      push(err instanceof Error ? err.message : 'Failed to mark as not spam')
     }
   }
 
+  // Attachments can be downloaded from any message inside an expanded
+  // thread, not just the representative (latest) one shown in the list --
+  // look inside its threadMessages too before falling back to activeFolder.
+  function findAnyMessage(id: string): EmailMessage | undefined {
+    if (selectedMessage?.id === id) return selectedMessage
+    return selectedMessage?.threadMessages?.find((m) => m.id === id) || messages.find((m) => m.id === id)
+  }
+
   async function downloadAttachment(messageId: string, index: number, filename: string) {
-    const message = messageId === selectedMessage?.id ? selectedMessage : messages.find((m) => m.id === messageId)
+    const message = findAnyMessage(messageId)
     const folder = message?.sourceFolder || activeFolder
     try {
       await api.downloadAttachment(Number(messageId), folder, index, filename)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download attachment')
+      push(err instanceof Error ? err.message : 'Failed to download attachment')
     }
   }
 
@@ -300,7 +336,7 @@ export default function App() {
       await api.moveMessage(Number(id), folder, target)
       clearSelectionAndRemove(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to move message')
+      push(err instanceof Error ? err.message : 'Failed to move message')
     }
   }
 
@@ -311,7 +347,7 @@ export default function App() {
       await api.deleteMessage(Number(id), folder)
       clearSelectionAndRemove(id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete message')
+      push(err instanceof Error ? err.message : 'Failed to delete message')
     }
   }
 
@@ -320,7 +356,7 @@ export default function App() {
       await api.createFolder(name)
       loadFolders()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create folder')
+      push(err instanceof Error ? err.message : 'Failed to create folder')
     }
   }
 
@@ -330,7 +366,7 @@ export default function App() {
       if (activeFolder === path) setActiveFolder('INBOX')
       loadFolders()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete folder')
+      push(err instanceof Error ? err.message : 'Failed to delete folder')
     }
   }
 
@@ -344,7 +380,7 @@ export default function App() {
       await api.deleteAlias(id)
       loadAliases()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete alias')
+      push(err instanceof Error ? err.message : 'Failed to delete alias')
     }
   }
 
@@ -353,11 +389,15 @@ export default function App() {
       .split('\n')
       .map((line) => `> ${line}`)
       .join('\n')}`
+    // In-Reply-To/References keep the reply threaded to this conversation
+    // (both in this webmail's own Inbox+Sent merge and in any other mail
+    // client that reads these headers) instead of starting a new one.
+    const isForward = mode === 'forward'
     setComposeDraft({
-      to: mode === 'forward' ? '' : message.from.email,
+      to: isForward ? '' : message.from.email,
       cc: mode === 'replyAll' && message.cc ? message.cc.join(', ') : undefined,
       subject:
-        mode === 'forward'
+        isForward
           ? message.subject.startsWith('Fwd:')
             ? message.subject
             : `Fwd: ${message.subject}`
@@ -365,6 +405,10 @@ export default function App() {
             ? message.subject
             : `Re: ${message.subject}`,
       body: quoted,
+      inReplyTo: isForward ? undefined : message.messageId,
+      references: isForward
+        ? undefined
+        : [...(message.references || []), message.messageId].filter((id): id is string => Boolean(id)),
     })
   }
 
@@ -378,15 +422,20 @@ export default function App() {
         body: draft.body,
         from: draft.from,
         attachments: draft.attachments,
+        inReplyTo: draft.inReplyTo,
+        references: draft.references,
       })
       if (draft.draftUid != null && draft.draftFolder) {
         await api.discardDraft(draft.draftUid, draft.draftFolder).catch(() => {})
       }
       setComposeDraft(null)
+      push('Message sent', 'success')
       loadFolders()
-      if (activeFolder === 'Sent') loadMessages('Sent')
+      // Refreshes whatever's currently open -- for the Inbox this re-merges
+      // threads so a reply just sent shows up in its conversation right away.
+      loadMessages(activeFolder)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message')
+      push(err instanceof Error ? err.message : 'Failed to send message')
     }
   }
 
@@ -464,15 +513,6 @@ export default function App() {
           onLogout={handleLogout}
         />
 
-        {error && (
-          <div
-            className="border-b px-4 py-2 text-sm"
-            style={{ borderColor: 'var(--border)', color: 'var(--danger)', background: 'var(--bg-elevated)' }}
-          >
-            {error}
-          </div>
-        )}
-
         <div className="flex min-h-0 flex-1">
           <div className={`${selectedMessage ? 'hidden md:flex' : 'flex'} w-full md:w-auto`}>
             <MessageList
@@ -522,6 +562,7 @@ export default function App() {
           onSaveDraft={saveDraft}
           onSend={handleSend}
           onDeleteDraft={handleDeleteDraft}
+          onValidationError={(message) => push(message, 'error')}
           primaryEmail={email}
           aliases={aliases.map((a) => a.source)}
         />
@@ -535,6 +576,8 @@ export default function App() {
           onDelete={deleteAlias}
         />
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   )
 }

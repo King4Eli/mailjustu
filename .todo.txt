@@ -1,8 +1,3 @@
-### Domain is now real (suyoapp.com) -- config side is done, DNS/infra side isn't
-in replies in same inbox instead of new sent or receive
-in admin  superadmin can edit limit and quota
-in ui make support received images
-
 ## Real domain (suyoapp.com) is wired into config; DNS/infra still needed
 - TLS certs under the certs and dovecot_config named volumes are whatever
   self-signed cert shipped in the base images. Replace with real certs

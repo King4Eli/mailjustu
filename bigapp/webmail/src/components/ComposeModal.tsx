@@ -14,6 +14,10 @@ export interface ComposeDraft {
   // and sending replace the original message instead of duplicating it.
   draftUid?: number
   draftFolder?: string
+  // Set when replying/forwarding -- carried through to the outgoing
+  // In-Reply-To/References headers so the message threads with its parent.
+  inReplyTo?: string
+  references?: string[]
 }
 
 interface ComposeModalProps {
@@ -22,6 +26,7 @@ interface ComposeModalProps {
   onSaveDraft: (draft: ComposeDraft) => void
   onSend: (draft: ComposeDraft) => void
   onDeleteDraft?: (draft: ComposeDraft) => void
+  onValidationError: (message: string) => void
   primaryEmail: string
   aliases: string[]
 }
@@ -38,6 +43,7 @@ export function ComposeModal({
   onSaveDraft,
   onSend,
   onDeleteDraft,
+  onValidationError,
   primaryEmail,
   aliases,
 }: ComposeModalProps) {
@@ -48,6 +54,10 @@ export function ComposeModal({
   const [sending, setSending] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function isEmpty(d: ComposeDraft) {
+    return !d.subject.trim() && !d.body.trim() && (d.attachments?.length ?? 0) === 0
+  }
 
   function toggleFull() {
     const next = !full
@@ -84,6 +94,14 @@ export function ComposeModal({
   }
 
   async function handleSend() {
+    if (!draft.to.trim()) {
+      onValidationError('Add at least one recipient before sending')
+      return
+    }
+    if (isEmpty(draft)) {
+      onValidationError('Cannot send an empty message -- add a subject, body, or attachment')
+      return
+    }
     setSending(true)
     try {
       await onSend(draft)

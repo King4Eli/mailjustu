@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
     const subject = form.get('subject') as string | null
     const body = form.get('body') as string | null
     const from = form.get('from') as string | null
+    const inReplyTo = (form.get('inReplyTo') as string | null) || undefined
+    const referencesRaw = (form.get('references') as string | null) || ''
+    const references = referencesRaw.split(/\s+/).filter(Boolean)
     if (!to) return apiError(400, 'to is required')
 
     let attachments
@@ -26,6 +29,10 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       if (err instanceof AttachmentLimitError) return apiError(400, err.message)
       throw err
+    }
+
+    if (!subject?.trim() && !body?.trim() && attachments.length === 0) {
+      return apiError(400, 'Message is empty -- add a subject, body, or attachment before sending')
     }
 
     let fromAddress = email
@@ -47,6 +54,8 @@ export async function POST(req: NextRequest) {
       text: body || '',
       attachments: attachments.map((f) => ({ filename: f.filename, content: f.content, contentType: f.contentType })),
       messageId: `<${crypto.randomUUID()}@${fromAddress.split('@')[1]}>`,
+      inReplyTo,
+      references: references.length > 0 ? references : undefined,
     }
 
     // Compile once (no network I/O) so the exact same MIME source --

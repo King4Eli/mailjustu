@@ -3,6 +3,8 @@ import { simpleParser } from 'mailparser'
 import { withImap, resolveFolder } from '@/lib/api/imap'
 import { requireSession } from '@/lib/api/auth'
 import { apiError, withApiErrors } from '@/lib/api/handler'
+import { htmlToText, renderSafeHtml } from '@/lib/api/mailHtml'
+import { computeThreadId, normalizeReferences } from '@/lib/api/threading'
 
 type Ctx = { params: Promise<{ uid: string }> }
 
@@ -18,6 +20,9 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       const parsed = await simpleParser(msg.source!)
       const envelope = msg.envelope!
       await client.messageFlagsAdd({ uid }, ['\\Seen'], { uid: true }).catch(() => {})
+      const messageId = parsed.messageId
+      const inReplyTo = parsed.inReplyTo
+      const references = normalizeReferences(parsed.references)
       return {
         uid: msg.uid,
         subject: envelope.subject || '(no subject)',
@@ -29,12 +34,19 @@ export async function GET(req: NextRequest, { params }: Ctx) {
         date: (envelope.date || new Date()).toISOString(),
         read: true,
         starred: msg.flags!.has('\\Flagged'),
-        body: parsed.text || parsed.html || '',
-        attachments: (parsed.attachments || []).map((a, index) => ({
-          index,
-          name: a.filename || 'attachment',
-          size: `${Math.ceil(a.size / 1024)} KB`,
-        })),
+        body: parsed.text || (parsed.html ? htmlToText(parsed.html) : ''),
+        html: parsed.html ? renderSafeHtml(parsed.html, parsed.attachments || []) : undefined,
+        messageId,
+        inReplyTo,
+        references,
+        threadId: computeThreadId({ messageId, inReplyTo, references }),
+        // index must match the position in the raw parsed.attachments array --
+        // the download endpoint (attachments/[index]) re-parses and indexes
+        // into that same unfiltered array -- so filter after mapping, not before.
+        attachments: (parsed.attachments || [])
+          .map((a, index) => ({ index, name: a.filename || 'attachment', size: `${Math.ceil(a.size / 1024)} KB`, inline: Boolean(a.cid && a.related) }))
+          .filter((a) => !a.inline)
+          .map(({ index, name, size }) => ({ index, name, size })),
       }
     })
     if (!message) return apiError(404, 'Message not found')

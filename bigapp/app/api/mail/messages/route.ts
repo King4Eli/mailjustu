@@ -3,6 +3,7 @@ import { simpleParser } from 'mailparser'
 import { withImap } from '@/lib/api/imap'
 import { requireSession } from '@/lib/api/auth'
 import { withApiErrors } from '@/lib/api/handler'
+import { computeThreadId, normalizeReferences } from '@/lib/api/threading'
 
 const LIST_LIMIT = 30
 
@@ -29,6 +30,9 @@ export async function GET(req: NextRequest) {
       })) {
         const parsed = await simpleParser(msg.source!)
         const envelope = msg.envelope!
+        const messageId = parsed.messageId
+        const inReplyTo = parsed.inReplyTo
+        const references = normalizeReferences(parsed.references)
         out.push({
           uid: msg.uid,
           subject: envelope.subject || '(no subject)',
@@ -41,11 +45,17 @@ export async function GET(req: NextRequest) {
           read: msg.flags!.has('\\Seen'),
           starred: msg.flags!.has('\\Flagged'),
           preview: cleanPreview(parsed.text),
-          attachments: (parsed.attachments || []).map((a, index) => ({
-            index,
-            name: a.filename || 'attachment',
-            size: `${Math.ceil(a.size / 1024)} KB`,
-          })),
+          messageId,
+          inReplyTo,
+          references,
+          threadId: computeThreadId({ messageId, inReplyTo, references }),
+          // Inline (cid-referenced) images render in the body itself, not
+          // as a downloadable attachment -- keep the paperclip icon and
+          // "Attachments" filter limited to real, separately-listed files.
+          attachments: (parsed.attachments || [])
+            .map((a, index) => ({ index, name: a.filename || 'attachment', size: `${Math.ceil(a.size / 1024)} KB`, inline: Boolean(a.cid && a.related) }))
+            .filter((a) => !a.inline)
+            .map(({ index, name, size }) => ({ index, name, size })),
         })
       }
       return out.reverse()

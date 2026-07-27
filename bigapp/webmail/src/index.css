@@ -89,3 +89,21 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Received HTML mail bodies -- sanitized server-side, rendered raw here.
+   Emails ship arbitrary inline widths/fonts; contain that instead of
+   letting it blow out the reading pane or override the app's own type. */
+.mail-html-body {
+  overflow-x: auto;
+  word-break: break-word;
+}
+.mail-html-body img {
+  max-width: 100%;
+  height: auto;
+}
+.mail-html-body table {
+  max-width: 100%;
+}
+.mail-html-body a {
+  color: var(--accent);
+}

@@ -134,10 +134,18 @@ export function MessageList({
                   </span>
                 </div>
                 <div
-                  className="truncate text-sm"
+                  className="flex items-center gap-1.5 truncate text-sm"
                   style={{ color: 'var(--text)', fontWeight: message.read ? 400 : 600 }}
                 >
-                  {message.subject}
+                  <span className="truncate">{message.subject}</span>
+                  {message.threadMessages && message.threadMessages.length > 1 && (
+                    <span
+                      className="shrink-0 rounded-full px-1.5 text-xs font-semibold"
+                      style={{ background: 'var(--bg-hover)', color: 'var(--text-faint)' }}
+                    >
+                      {message.threadMessages.length}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <p className="truncate text-xs" style={{ color: 'var(--text-faint)' }}>
