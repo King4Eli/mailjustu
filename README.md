@@ -21,10 +21,10 @@ adds dev-only ports and bind-mounts each service's config under
 ./setup.sh
 ```
 
-Or invoke compose directly -- `--env-file .env/api.env` is required
-(not optional) since `docker-compose.yml` reads `${MAIL_HOSTNAME}` from it
-and there's no root `.env` file for compose to find automatically (`.env/`
-here is a directory of per-service files, not compose's own `.env`):
+Or invoke compose directly -- `--env-file .env/api.env` is required since
+`docker-compose.yml` reads `${MAIL_HOSTNAME}` from it and there's no root
+`.env` file compose can find automatically (`.env/` is a directory of
+per-service files, not compose's own `.env`):
 
 ```bash
 docker compose --env-file .env/api.env up -d
@@ -52,10 +52,10 @@ docker compose \
 ```
 
 Postfix is already configured (`./.env/postfix.env`) to route mail through
-the Rspamd and OpenDKIM milters if they're running; if you don't include
-those files, Postfix just skips them (`milter_default_action=accept`).
+the Rspamd and OpenDKIM milters if they're running; without those files
+Postfix just skips them (`milter_default_action=accept`).
 
-For a production deploy, skip the dev override and supply your own:
+For production, skip the dev override and supply your own:
 `docker compose --env-file .env/api.env -f docker-compose.yml -f docker-compose.<yours>.yml up -d`.
 
 ## Mailboxes are real accounts
@@ -65,10 +65,10 @@ Postfix (`mysql:` maps) and Dovecot (SQL passdb) -- so a mailbox created
 through the admin dashboard (or the API) can immediately send, receive,
 and log in over real SMTP/IMAP. The database must be provisioned before
 the API starts. Each mailbox also gets a real, Dovecot-enforced storage
-quota (`quota_mb`, per-domain, see below).
+quota (`quota_mb`, per-domain).
 
 Mailboxes are managed through the admin dashboard's "Mailboxes" tab, or
-directly via the API once you're logged in as an admin:
+directly via the API once logged in as an admin:
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:4001/api/auth/login \
@@ -82,27 +82,22 @@ curl -X POST http://localhost:4001/api/admin/mailboxes \
 
 ### Admin access is real login, not a shared secret
 
-There's no static admin token. Signing into the admin dashboard is the
-same IMAP-backed login as webUI; what you get access to depends on the
-account:
+There's no static admin token -- signing into the admin dashboard is the
+same IMAP-backed login as webUI; access depends on the account:
 
 - **Super admin** -- email listed in `./.env/api.env`'s
-  `SUPER_ADMIN_EMAILS`. Full access: every domain, mailbox, and alias,
-  plus Services/health/stats. Bootstrapping the first one has no
-  self-serve flow through the dashboard itself (there's nobody to
-  authorize it yet) -- instead, from the host:
+  `SUPER_ADMIN_EMAILS`. Full access: every domain, mailbox, alias, plus
+  Services/health/stats. Bootstrapping the first one has no self-serve
+  flow (nobody exists yet to authorize it) -- from the host:
   ```bash
   docker exec -it mail_justu_server node scripts/bootstrap-admin.js admin@mail.example.com 'somepassword'
   ```
   creates (or resets) that mailbox with `is_admin=1`. Then add the same
-  email to `SUPER_ADMIN_EMAILS` in `./.env/api.env` and recreate the
-  container for full super-admin access (that check is env-based, not a
-  DB column, so the script can't grant it alone).
-- **Domain admin** -- a mailbox with `virtual_users.is_admin = true`
-  (set by a super admin, from the Mailboxes tab or `PATCH
-  /api/admin/mailboxes/:id`). Scoped to their own domain only --
-  mailboxes, aliases, and domain limits for that one domain -- and never
-  sees Services/health/stats.
+  email to `SUPER_ADMIN_EMAILS` and recreate the container (that check is
+  env-based, not a DB column, so the script can't grant it alone).
+- **Domain admin** -- a mailbox with `virtual_users.is_admin = true` (set
+  by a super admin). Scoped to their own domain's mailboxes, aliases, and
+  limits; never sees Services/health/stats.
 - Anyone else gets 401 on every `/api/admin/*` route.
 
 webUI shows an "Open admin dashboard" link automatically for accounts
@@ -113,9 +108,8 @@ that have either role.
 Any logged-in webUI user can create their own aliases ("Manage aliases"
 in the sidebar) -- mail to the alias lands in their inbox, and Compose
 lets them send *as* the alias. Aliases must be on the user's own domain
-(`jordan@mail.example.com` can only create `whatever@mail.example.com`,
-not another domain) -- that restriction is independent of admin role,
-since it's a personal self-service feature, not an admin one.
+(`jordan@mail.example.com` can only create `whatever@mail.example.com`) --
+independent of admin role, since it's a personal feature, not an admin one.
 
 ### Per-domain limits + DNS records
 
@@ -123,25 +117,24 @@ The admin dashboard's Domains tab sets, per domain: max mailboxes, max
 aliases per mailbox, and a storage quota (MB) per mailbox -- each falls
 back to a global default in `./.env/api.env`
 (`MAX_MAILBOXES_PER_DOMAIN`/`MAX_ALIASES_PER_MAILBOX`/`DEFAULT_MAILBOX_QUOTA_MB`)
-when left unset. It also generates copy-pasteable MX/A/SPF/DMARC records
-for the domain (DKIM is flagged as unavailable -- see Known follow-ups).
-Only super admins can create/delete domains; domain admins can edit
-limits for their own domain.
+when unset. It also generates copy-pasteable MX/A/SPF/DMARC records for
+the domain (DKIM is flagged as unavailable -- see Known follow-ups). Only
+super admins can create/delete domains; domain admins can edit limits for
+their own domain.
 
 ## Environment
 
-Each component's configuration lives in its own file under `./.env/`
+Each component's config lives in its own file under `./.env/`
 (`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `server.env`, ...)
-rather than one shared `.env`. Update the passwords in there before any real
-deployment -- the checked-in values are placeholders. There's no
-`mysql.env` here -- `api.env`'s `DB_*` vars point at the shared
-`global_mysql` instance, which this project doesn't own or configure.
+rather than one shared `.env`. Update the passwords before any real
+deployment -- checked-in values are placeholders. There's no `mysql.env`
+here -- `api.env`'s `DB_*` vars point at the shared `global_mysql`
+instance, which this project doesn't own or configure.
 
 `server.env` (`ADMIN_TITLE`, `MAIL_HOST`) is read live by `bigapp`'s
-Next.js server on every request/at container startup, not baked in at
-build time -- change it and restart the container, no rebuild needed.
-`api.env` is also loaded into the same container now, since the API runs
-inside it.
+Next.js server on every request/at startup, not baked in at build time --
+change it and restart the container, no rebuild needed. `api.env` is also
+loaded into the same container, since the API runs inside it.
 
 ## Frontends + API
 
@@ -150,30 +143,24 @@ cd bigapp && npm install && npm run dev   # everything, :4001 (/webmail, /admin,
 ```
 
 `bigapp` is a single Next.js app serving both `/webmail` and `/admin`
-(component source lives in `bigapp/webmail/src/` and `bigapp/admin/src/`)
-plus the API itself under `/api` (`bigapp/app/api/`, logic in
-`bigapp/lib/api/`) -- one process, one container, no separate service to
-reach or configure a URL for.
+(component source in `bigapp/webmail/src/` and `bigapp/admin/src/`) plus
+the API under `/api` (`bigapp/app/api/`, logic in `bigapp/lib/api/`) --
+one process, one container, no separate service to reach or configure.
 
-## bigapp/lib/api/
-
-No ORM, no Express -- plain Next.js Route Handlers (`bigapp/app/api/**/route.ts`)
+No ORM, no Express -- plain Route Handlers (`bigapp/app/api/**/route.ts`)
 calling into `bigapp/lib/api/`. `lib/api/auth.ts`'s `requireSession` etc.
-verify logins by actually connecting to Dovecot over IMAP, then resolve a
-role (super/domain/user) from `SUPER_ADMIN_EMAILS` + `virtual_users.is_admin`
-and store it on the session; the `app/api/mail/*` routes handle
-folders/messages/send (with attachments, via the Fetch API's native
-`FormData`)/flags/move/delete over IMAP (imapflow) and SMTP (nodemailer);
-`app/api/mail/aliases/*` is the self-service, domain-scoped alias CRUD;
+verify logins by connecting to Dovecot over IMAP, then resolve a role
+(super/domain/user) from `SUPER_ADMIN_EMAILS` + `virtual_users.is_admin`
+and store it on the session. `app/api/mail/*` handles
+folders/messages/send/flags/move/delete over IMAP (imapflow) and SMTP
+(nodemailer); `app/api/mail/aliases/*` is the self-service alias CRUD;
 `app/api/admin/mailboxes/*` and `app/api/admin/domains/*` are role-scoped
 admin CRUD against MySQL; `app/api/admin/health` and `app/api/admin/stats`
-(super-admin only, both `force-dynamic` -- see comments in those files for
-why) do live TCP checks and proxy Rspamd's real controller stats.
-Webmail/admin sessions are an in-memory token -> {email, password, role,
-domain} map with a TTL (`SESSION_TTL_MINUTES`), not JWTs -- simple, and the
-password never touches the browser after login. That map lives in the one
-long-running Next.js process (`next start`, no clustering), same execution
-model Express ran under.
+(super-admin only) do live TCP checks and proxy Rspamd's controller
+stats. Sessions are an in-memory token -> {email, password, role, domain}
+map with a TTL (`SESSION_TTL_MINUTES`), not JWTs -- the password never
+touches the browser after login. That map lives in the one long-running
+Next.js process (`next start`, no clustering).
 
 ## Backing up / restoring
 
@@ -188,14 +175,14 @@ docker exec global_mysql mysqldump \
   --databases "$(grep ^DB_NAME .env/api.env | cut -d= -f2)" --routines --triggers > dump.sql
 ```
 
-(The app-scoped user lacks the `PROCESS` privilege, so mysqldump prints a
-harmless tablespace warning to stderr -- the dump itself still completes.)
-The resulting dump contains bcrypt password hashes, not plaintext --
-still, treat it as a secret, same as the `.env/` files.
+(The app-scoped user lacks `PROCESS`, so mysqldump prints a harmless
+tablespace warning to stderr -- the dump still completes.) The dump
+contains bcrypt password hashes, not plaintext -- still treat it as a
+secret, same as the `.env/` files.
 
 ## Known follow-ups
 
-See `.todo.txt` for the full, organized list. Highlights:
+See `.todo.txt` for the full list. Highlights:
 
 - OpenDKIM ships in verify-only mode. Signing needs real per-domain keys
   and matching DNS TXT records, which only make sense for an owned domain.
@@ -203,5 +190,3 @@ See `.todo.txt` for the full, organized list. Highlights:
   yet -- they'd need Postfix queue introspection and log parsing (queue
   access means either mounting the Docker socket or adding a small
   in-container helper; neither is wired up).
-- Received attachments show name/size but there's no download endpoint
-  yet -- only the compose-time upload path is wired up.
