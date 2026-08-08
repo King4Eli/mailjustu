@@ -2,20 +2,16 @@
 
 A self-hosted mail server (Postfix + Dovecot + MySQL, with optional spam
 filtering, DKIM, and antivirus). Everything else is one Next.js app,
-`bigapp/`: two React frontends served from one origin -- `/admin` (an
-operator dashboard, source in `bigapp/admin/`) and `/webmail` (a webmail
-client, source in `bigapp/webmail/`) -- plus the API itself as Route
-Handlers under `/api` (`bigapp/app/api/`, logic in `bigapp/lib/api/`).
-There's no separate backend service; the API used to be its own Express
-process and was absorbed directly into Next.js.
+`bigapp/`: two React frontends served from one origin -- `/admin` (operator
+dashboard) and `/webmail` (webmail client) -- plus the API itself as Route
+Handlers under `/api`. There's no separate backend service.
 
 ## Running the mail stack
 
 `docker-compose.yml` is the minimum required to send and receive mail:
-MySQL, Postfix, Dovecot, and the API. `docker-compose.override.yml` sits
-next to it and is loaded automatically by plain `docker compose` -- it
-adds dev-only ports and bind-mounts each service's config under
-`./volumes` so it's visible and editable on the host.
+MySQL, Postfix, Dovecot, and the API. `docker-compose.override.yml` is
+loaded automatically by plain `docker compose` and adds dev-only ports plus
+bind-mounts of each service's config under `./volumes`.
 
 ```bash
 ./setup.sh
@@ -23,8 +19,7 @@ adds dev-only ports and bind-mounts each service's config under
 
 Or invoke compose directly -- `--env-file .env/api.env` is required since
 `docker-compose.yml` reads `${MAIL_HOSTNAME}` from it and there's no root
-`.env` file compose can find automatically (`.env/` is a directory of
-per-service files, not compose's own `.env`):
+`.env` compose can find automatically:
 
 ```bash
 docker compose --env-file .env/api.env up -d
@@ -34,8 +29,8 @@ Everything else is opt-in, one file per concern:
 
 | File | Adds | Why it's separate |
 | --- | --- | --- |
-| `docker-compose.rspamd.yml` | Redis + Rspamd | Spam filtering -- useful, not required to send/receive mail |
-| `docker-compose.opendkim.yml` | OpenDKIM | DKIM signing/verification -- improves deliverability, not required |
+| `docker-compose.rspamd.yml` | Redis + Rspamd | Spam filtering -- not required |
+| `docker-compose.opendkim.yml` | OpenDKIM | DKIM signing/verification -- not required |
 | `docker-compose.clamav.yml` | ClamAV | Antivirus scanning -- not required |
 
 Layer in whichever you want with `-f`:
@@ -51,9 +46,9 @@ docker compose \
   up -d
 ```
 
-Postfix is already configured (`./.env/postfix.env`) to route mail through
-the Rspamd and OpenDKIM milters if they're running; without those files
-Postfix just skips them (`milter_default_action=accept`).
+Postfix routes mail through the Rspamd and OpenDKIM milters if they're
+running; without those files it just skips them
+(`milter_default_action=accept`).
 
 For production, skip the dev override and supply your own:
 `docker compose --env-file .env/api.env -f docker-compose.yml -f docker-compose.<yours>.yml up -d`.
@@ -82,34 +77,30 @@ curl -X POST http://localhost:4001/api/admin/mailboxes \
 
 ### Admin access is real login, not a shared secret
 
-There's no static admin token -- signing into the admin dashboard is the
-same IMAP-backed login as webUI; access depends on the account:
+Signing into the admin dashboard is the same IMAP-backed login as webUI;
+access depends on the account:
 
 - **Super admin** -- email listed in `./.env/api.env`'s
   `SUPER_ADMIN_EMAILS`. Full access: every domain, mailbox, alias, plus
   Services/health/stats. Bootstrapping the first one has no self-serve
-  flow (nobody exists yet to authorize it) -- from the host:
+  flow -- from the host:
   ```bash
   docker exec -it mail_justu_server node scripts/bootstrap-admin.js admin@mail.example.com 'somepassword'
   ```
   creates (or resets) that mailbox with `is_admin=1`. Then add the same
   email to `SUPER_ADMIN_EMAILS` and recreate the container (that check is
-  env-based, not a DB column, so the script can't grant it alone).
+  env-based, not a DB column).
 - **Domain admin** -- a mailbox with `virtual_users.is_admin = true` (set
   by a super admin). Scoped to their own domain's mailboxes, aliases, and
   limits; never sees Services/health/stats.
 - Anyone else gets 401 on every `/api/admin/*` route.
-
-webUI shows an "Open admin dashboard" link automatically for accounts
-that have either role.
 
 ### Aliases are self-service, domain-scoped
 
 Any logged-in webUI user can create their own aliases ("Manage aliases"
 in the sidebar) -- mail to the alias lands in their inbox, and Compose
 lets them send *as* the alias. Aliases must be on the user's own domain
-(`jordan@mail.example.com` can only create `whatever@mail.example.com`) --
-independent of admin role, since it's a personal feature, not an admin one.
+(`jordan@mail.example.com` can only create `whatever@mail.example.com`).
 
 ### Per-domain limits + DNS records
 
@@ -132,9 +123,9 @@ here -- `api.env`'s `DB_*` vars point at the shared `global_mysql`
 instance, which this project doesn't own or configure.
 
 `server.env` (`ADMIN_TITLE`, `MAIL_HOST`) is read live by `bigapp`'s
-Next.js server on every request/at startup, not baked in at build time --
-change it and restart the container, no rebuild needed. `api.env` is also
-loaded into the same container, since the API runs inside it.
+Next.js server, not baked in at build time -- change it and restart the
+container, no rebuild needed. `api.env` is also loaded into the same
+container, since the API runs inside it.
 
 ## Frontends + API
 
@@ -143,15 +134,14 @@ cd bigapp && npm install && npm run dev   # everything, :4001 (/webmail, /admin,
 ```
 
 `bigapp` is a single Next.js app serving both `/webmail` and `/admin`
-(component source in `bigapp/webmail/src/` and `bigapp/admin/src/`) plus
-the API under `/api` (`bigapp/app/api/`, logic in `bigapp/lib/api/`) --
-one process, one container, no separate service to reach or configure.
+(source in `bigapp/webmail/src/` and `bigapp/admin/src/`) plus the API
+under `/api` (`bigapp/app/api/`, logic in `bigapp/lib/api/`) -- one
+process, one container, no separate service to reach or configure.
 
-No ORM, no Express -- plain Route Handlers (`bigapp/app/api/**/route.ts`)
-calling into `bigapp/lib/api/`. `lib/api/auth.ts`'s `requireSession` etc.
-verify logins by connecting to Dovecot over IMAP, then resolve a role
-(super/domain/user) from `SUPER_ADMIN_EMAILS` + `virtual_users.is_admin`
-and store it on the session. `app/api/mail/*` handles
+No ORM, no Express -- plain Route Handlers calling into `bigapp/lib/api/`.
+`lib/api/auth.ts`'s `requireSession` verifies logins over IMAP, then
+resolves a role (super/domain/user) from `SUPER_ADMIN_EMAILS` +
+`virtual_users.is_admin`. `app/api/mail/*` handles
 folders/messages/send/flags/move/delete over IMAP (imapflow) and SMTP
 (nodemailer); `app/api/mail/aliases/*` is the self-service alias CRUD;
 `app/api/admin/mailboxes/*` and `app/api/admin/domains/*` are role-scoped
@@ -159,8 +149,7 @@ admin CRUD against MySQL; `app/api/admin/health` and `app/api/admin/stats`
 (super-admin only) do live TCP checks and proxy Rspamd's controller
 stats. Sessions are an in-memory token -> {email, password, role, domain}
 map with a TTL (`SESSION_TTL_MINUTES`), not JWTs -- the password never
-touches the browser after login. That map lives in the one long-running
-Next.js process (`next start`, no clustering).
+touches the browser after login.
 
 ## Backing up / restoring
 
@@ -175,10 +164,8 @@ docker exec global_mysql mysqldump \
   --databases "$(grep ^DB_NAME .env/api.env | cut -d= -f2)" --routines --triggers > dump.sql
 ```
 
-(The app-scoped user lacks `PROCESS`, so mysqldump prints a harmless
-tablespace warning to stderr -- the dump still completes.) The dump
-contains bcrypt password hashes, not plaintext -- still treat it as a
-secret, same as the `.env/` files.
+The dump contains bcrypt password hashes, not plaintext -- still treat it
+as a secret, same as the `.env/` files.
 
 ## Known follow-ups
 
@@ -187,6 +174,4 @@ See `.todo.txt` for the full list. Highlights:
 - OpenDKIM ships in verify-only mode. Signing needs real per-domain keys
   and matching DNS TXT records, which only make sense for an owned domain.
 - Admin's "Mail activity", "Mail queue", and "Security" views don't exist
-  yet -- they'd need Postfix queue introspection and log parsing (queue
-  access means either mounting the Docker socket or adding a small
-  in-container helper; neither is wired up).
+  yet -- they'd need Postfix queue introspection and log parsing.
