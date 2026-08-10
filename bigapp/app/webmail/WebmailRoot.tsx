@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import App from '../../webmail/src/App'
+import App from "../../webmail/src/App";
 
 export default function WebmailRoot() {
-  return <App />
+  return <App />;
 }

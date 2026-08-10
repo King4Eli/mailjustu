@@ -1,4 +1,4 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 // /api/* is served directly by Route Handlers under app/api/ now -- the
 // API used to be a separate Express service (mail_justu_api); its logic
@@ -10,8 +10,8 @@ import type { NextConfig } from 'next'
 // full node_modules isn't worth that friction.
 const nextConfig: NextConfig = {
   async redirects() {
-    return [{ source: '/', destination: '/webmail', permanent: false }]
+    return [{ source: "/", destination: "/webmail", permanent: false }];
   },
-}
+};
 
-export default nextConfig
+export default nextConfig;

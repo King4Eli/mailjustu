@@ -1,44 +1,46 @@
-import { useEffect, useState } from 'react'
-import { Star, Paperclip, AtSign, X } from 'lucide-react'
-import type { EmailMessage, MessageFilter } from '../types'
-import { formatListDate, initials, avatarColor } from '../utils'
+import { useEffect, useState } from "react";
+import { Star, Paperclip, AtSign, X } from "lucide-react";
+import type { EmailMessage, MessageFilter } from "../types";
+import { formatListDate, initials, avatarColor } from "../utils";
 
 interface MessageListProps {
-  messages: EmailMessage[]
-  selectedId: string | null
-  onSelect: (message: EmailMessage) => void
-  onToggleStar: (id: string) => void
-  folderLabel: string
-  filter: MessageFilter
-  onFilterChange: (filter: MessageFilter) => void
+  messages: EmailMessage[];
+  selectedId: string | null;
+  onSelect: (message: EmailMessage) => void;
+  onToggleStar: (id: string) => void;
+  folderLabel: string;
+  filter: MessageFilter;
+  onFilterChange: (filter: MessageFilter) => void;
   // User-resizable (see App.tsx's drag handle) -- only applied at the md+
   // breakpoint; below that this column is always full-width.
-  width: number
+  width: number;
   // Set when a sidebar alias is selected -- narrows `messages` (already
   // filtered by the caller) down to mail addressed to that alias, across
   // whichever folder is active.
-  activeAliasFilter: string | null
-  onClearAliasFilter: () => void
+  activeAliasFilter: string | null;
+  onClearAliasFilter: () => void;
 }
 
 function useIsMdUp() {
-  const [isMdUp, setIsMdUp] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+  const [isMdUp, setIsMdUp] = useState(
+    () => window.matchMedia("(min-width: 768px)").matches,
+  );
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const handler = () => setIsMdUp(mq.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-  return isMdUp
+    const mq = window.matchMedia("(min-width: 768px)");
+    const handler = () => setIsMdUp(mq.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMdUp;
 }
 
 const FILTERS: { id: MessageFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'unread', label: 'Unread' },
-  { id: 'read', label: 'Read' },
-  { id: 'starred', label: 'Starred' },
-  { id: 'attachments', label: 'Attachments' },
-]
+  { id: "all", label: "All" },
+  { id: "unread", label: "Unread" },
+  { id: "read", label: "Read" },
+  { id: "starred", label: "Starred" },
+  { id: "attachments", label: "Attachments" },
+];
 
 export function MessageList({
   messages,
@@ -52,32 +54,46 @@ export function MessageList({
   activeAliasFilter,
   onClearAliasFilter,
 }: MessageListProps) {
-  const isMdUp = useIsMdUp()
+  const isMdUp = useIsMdUp();
   return (
     <div
       className="flex h-full w-full flex-col overflow-hidden border-r"
-      style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)', ...(isMdUp ? { width } : {}) }}
+      style={{
+        borderColor: "var(--border)",
+        background: "var(--bg-elevated)",
+        ...(isMdUp ? { width } : {}),
+      }}
     >
       <div
         className="flex items-center justify-between border-b px-4 py-3"
-        style={{ borderColor: 'var(--border)' }}
+        style={{ borderColor: "var(--border)" }}
       >
-        <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
           {folderLabel}
         </h2>
-        <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
-          {messages.length} {messages.length === 1 ? 'message' : 'messages'}
+        <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+          {messages.length} {messages.length === 1 ? "message" : "messages"}
         </span>
       </div>
 
       {activeAliasFilter && (
         <div
           className="flex items-center gap-2 border-b px-4 py-2 text-xs font-medium"
-          style={{ borderColor: 'var(--border)', background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          style={{
+            borderColor: "var(--border)",
+            background: "var(--accent-soft)",
+            color: "var(--accent)",
+          }}
         >
           <AtSign size={13} className="shrink-0" />
-          <span className="flex-1 truncate">Only mail to {activeAliasFilter}</span>
-          <button onClick={onClearAliasFilter} className="flex shrink-0 items-center gap-1 hover:opacity-80" title="Clear alias filter">
+          <span className="flex-1 truncate">
+            Only mail to {activeAliasFilter}
+          </span>
+          <button
+            onClick={onClearAliasFilter}
+            className="flex shrink-0 items-center gap-1 hover:opacity-80"
+            title="Clear alias filter"
+          >
             <X size={13} />
           </button>
         </div>
@@ -85,50 +101,52 @@ export function MessageList({
 
       <div
         className="flex items-center gap-1 overflow-x-auto border-b px-3 py-2"
-        style={{ borderColor: 'var(--border)' }}
+        style={{ borderColor: "var(--border)" }}
       >
         {FILTERS.map((f) => {
-          const isActive = filter === f.id
+          const isActive = filter === f.id;
           return (
             <button
               key={f.id}
               onClick={() => onFilterChange(f.id)}
               className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition"
               style={{
-                background: isActive ? 'var(--accent)' : 'var(--bg-hover)',
-                color: isActive ? 'white' : 'var(--text-muted)',
+                background: isActive ? "var(--accent)" : "var(--bg-hover)",
+                color: isActive ? "white" : "var(--text-muted)",
               }}
             >
               {f.label}
             </button>
-          )
+          );
         })}
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-            <p className="text-sm" style={{ color: 'var(--text-faint)' }}>
+            <p className="text-sm" style={{ color: "var(--text-faint)" }}>
               No messages here.
             </p>
           </div>
         )}
         {messages.map((message) => {
-          const isSelected = message.id === selectedId
+          const isSelected = message.id === selectedId;
           return (
             <button
               key={message.id}
               onClick={() => onSelect(message)}
               className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition"
               style={{
-                borderColor: 'var(--border)',
-                background: isSelected ? 'var(--bg-selected)' : 'transparent',
+                borderColor: "var(--border)",
+                background: isSelected ? "var(--bg-selected)" : "transparent",
               }}
               onMouseEnter={(e) => {
-                if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)'
+                if (!isSelected)
+                  e.currentTarget.style.background = "var(--bg-hover)";
               }}
               onMouseLeave={(e) => {
-                if (!isSelected) e.currentTarget.style.background = 'transparent'
+                if (!isSelected)
+                  e.currentTarget.style.background = "transparent";
               }}
             >
               <div
@@ -143,36 +161,53 @@ export function MessageList({
                   <span
                     className="truncate text-sm"
                     style={{
-                      color: 'var(--text)',
+                      color: "var(--text)",
                       fontWeight: message.read ? 500 : 700,
                     }}
                   >
                     {message.from.name}
                   </span>
-                  <span className="shrink-0 text-xs" style={{ color: 'var(--text-faint)' }}>
+                  <span
+                    className="shrink-0 text-xs"
+                    style={{ color: "var(--text-faint)" }}
+                  >
                     {formatListDate(message.date)}
                   </span>
                 </div>
                 <div
                   className="flex items-center gap-1.5 truncate text-sm"
-                  style={{ color: 'var(--text)', fontWeight: message.read ? 400 : 600 }}
+                  style={{
+                    color: "var(--text)",
+                    fontWeight: message.read ? 400 : 600,
+                  }}
                 >
                   <span className="truncate">{message.subject}</span>
-                  {message.threadMessages && message.threadMessages.length > 1 && (
-                    <span
-                      className="shrink-0 rounded-full px-1.5 text-xs font-semibold"
-                      style={{ background: 'var(--bg-hover)', color: 'var(--text-faint)' }}
-                    >
-                      {message.threadMessages.length}
-                    </span>
-                  )}
+                  {message.threadMessages &&
+                    message.threadMessages.length > 1 && (
+                      <span
+                        className="shrink-0 rounded-full px-1.5 text-xs font-semibold"
+                        style={{
+                          background: "var(--bg-hover)",
+                          color: "var(--text-faint)",
+                        }}
+                      >
+                        {message.threadMessages.length}
+                      </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <p className="truncate text-xs" style={{ color: 'var(--text-faint)' }}>
+                  <p
+                    className="truncate text-xs"
+                    style={{ color: "var(--text-faint)" }}
+                  >
                     {message.preview}
                   </p>
                   {message.attachments && message.attachments.length > 0 && (
-                    <Paperclip size={12} className="shrink-0" style={{ color: 'var(--text-faint)' }} />
+                    <Paperclip
+                      size={12}
+                      className="shrink-0"
+                      style={{ color: "var(--text-faint)" }}
+                    />
                   )}
                 </div>
               </div>
@@ -181,27 +216,31 @@ export function MessageList({
                 {!message.read && (
                   <span
                     className="h-2 w-2 rounded-full"
-                    style={{ background: 'var(--unread-dot)' }}
+                    style={{ background: "var(--unread-dot)" }}
                   />
                 )}
                 <span
                   role="button"
                   onClick={(e) => {
-                    e.stopPropagation()
-                    onToggleStar(message.id)
+                    e.stopPropagation();
+                    onToggleStar(message.id);
                   }}
                 >
                   <Star
                     size={15}
-                    fill={message.starred ? 'var(--accent)' : 'none'}
-                    style={{ color: message.starred ? 'var(--accent)' : 'var(--text-faint)' }}
+                    fill={message.starred ? "var(--accent)" : "none"}
+                    style={{
+                      color: message.starred
+                        ? "var(--accent)"
+                        : "var(--text-faint)",
+                    }}
                   />
                 </span>
               </div>
             </button>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

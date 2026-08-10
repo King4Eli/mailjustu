@@ -1,17 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
-import { Sidebar } from './components/Sidebar'
-import { TopBar } from './components/TopBar'
-import { MessageList } from './components/MessageList'
-import { ReadingPane } from './components/ReadingPane'
-import { ComposeModal, type ComposeDraft } from './components/ComposeModal'
-import { AliasesModal } from './components/AliasesModal'
-import { Login } from './components/Login'
-import { useToasts, ToastStack } from './components/Toast'
-import * as api from './api'
-import type { ApiFolder, ApiMessage, ApiAlias } from './api'
-import type { EmailMessage, FolderInfo, MessageFilter } from './types'
-import { getListWidth, setListWidth as persistListWidth, LIST_WIDTH_MIN, LIST_WIDTH_MAX } from './settings'
-import { buildInboxThreads } from './utils'
+import { useEffect, useRef, useState } from "react";
+import { Sidebar } from "./components/Sidebar";
+import { TopBar } from "./components/TopBar";
+import { MessageList } from "./components/MessageList";
+import { ReadingPane } from "./components/ReadingPane";
+import { ComposeModal, type ComposeDraft } from "./components/ComposeModal";
+import { AliasesModal } from "./components/AliasesModal";
+import { Login } from "./components/Login";
+import { useToasts, ToastStack } from "./components/Toast";
+import * as api from "./api";
+import type { ApiFolder, ApiMessage, ApiAlias } from "./api";
+import type { EmailMessage, FolderInfo, MessageFilter } from "./types";
+import {
+  getListWidth,
+  setListWidth as persistListWidth,
+  LIST_WIDTH_MIN,
+  LIST_WIDTH_MAX,
+} from "./settings";
+import { buildInboxThreads } from "./utils";
 
 function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   return {
@@ -20,8 +25,8 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
     to: m.to,
     cc: m.cc,
     subject: m.subject,
-    preview: m.preview || '',
-    body: m.body || '',
+    preview: m.preview || "",
+    body: m.body || "",
     html: m.html,
     date: m.date,
     read: m.read,
@@ -32,12 +37,18 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
     inReplyTo: m.inReplyTo,
     references: m.references,
     threadId: m.threadId,
-  }
+  };
 }
 
 function toFolderInfo(f: ApiFolder): FolderInfo {
-  const name = f.specialUse === '\\Junk' ? 'Spam' : f.name
-  return { id: f.path, name, icon: f.specialUse || 'inbox', unseen: f.unseen, messages: f.messages }
+  const name = f.specialUse === "\\Junk" ? "Spam" : f.name;
+  return {
+    id: f.path,
+    name,
+    icon: f.specialUse || "inbox",
+    unseen: f.unseen,
+    messages: f.messages,
+  };
 }
 
 // ComposeModal renders the quoted previous message as its own read-only
@@ -46,122 +57,159 @@ function toFolderInfo(f: ApiFolder): FolderInfo {
 // draft is actually sent or saved.
 function combinedBody(draft: ComposeDraft): string {
   return draft.quoteBody
-    ? `${draft.body.trim()}\n\n${draft.quoteHeading ? `${draft.quoteHeading}\n` : ''}${draft.quoteBody}`
-    : draft.body
+    ? `${draft.body.trim()}\n\n${draft.quoteHeading ? `${draft.quoteHeading}\n` : ""}${draft.quoteBody}`
+    : draft.body;
 }
 
 export default function App() {
-  const [email, setEmail] = useState<string | null>(() => api.getStoredSession()?.email ?? null)
-  const [role, setRole] = useState<'super' | 'domain' | 'user'>(() => api.getStoredSession()?.role ?? 'user')
-  const [folders, setFolders] = useState<FolderInfo[]>([])
-  const [activeFolder, setActiveFolder] = useState('INBOX')
-  const [messages, setMessages] = useState<EmailMessage[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedMessage, setSelectedMessage] = useState<EmailMessage | null>(null)
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<MessageFilter>('all')
-  const [loading, setLoading] = useState(false)
-  const { toasts, push, dismiss } = useToasts()
-  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
-    window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-  )
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null)
-  const [aliases, setAliases] = useState<ApiAlias[]>([])
-  const [aliasesOpen, setAliasesOpen] = useState(false)
-  const [activeAlias, setActiveAlias] = useState<string | null>(null)
-  const [usage, setUsage] = useState<{ usedBytes: number | null; quotaMb: number | null } | null>(null)
-  const [listWidth, setListWidthState] = useState(() => getListWidth())
-  const resizingRef = useRef(false)
+  const [email, setEmail] = useState<string | null>(
+    () => api.getStoredSession()?.email ?? null,
+  );
+  const [role, setRole] = useState<"super" | "domain" | "user">(
+    () => api.getStoredSession()?.role ?? "user",
+  );
+  const [folders, setFolders] = useState<FolderInfo[]>([]);
+  const [activeFolder, setActiveFolder] = useState("INBOX");
+  const [messages, setMessages] = useState<EmailMessage[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<EmailMessage | null>(
+    null,
+  );
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<MessageFilter>("all");
+  const [loading, setLoading] = useState(false);
+  const { toasts, push, dismiss } = useToasts();
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light",
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null);
+  const [aliases, setAliases] = useState<ApiAlias[]>([]);
+  const [aliasesOpen, setAliasesOpen] = useState(false);
+  const [activeAlias, setActiveAlias] = useState<string | null>(null);
+  const [usage, setUsage] = useState<{
+    usedBytes: number | null;
+    quotaMb: number | null;
+  } | null>(null);
+  const [listWidth, setListWidthState] = useState(() => getListWidth());
+  const resizingRef = useRef(false);
 
   async function loadFolders() {
     try {
-      const { folders: apiFolders } = await api.getFolders()
-      const mapped = apiFolders.map(toFolderInfo)
-      const inboxIndex = mapped.findIndex((f) => f.icon === '\\Inbox')
-      const starred: FolderInfo = { id: 'STARRED', name: 'Starred', icon: 'starred', unseen: 0, messages: 0 }
+      const { folders: apiFolders } = await api.getFolders();
+      const mapped = apiFolders.map(toFolderInfo);
+      const inboxIndex = mapped.findIndex((f) => f.icon === "\\Inbox");
+      const starred: FolderInfo = {
+        id: "STARRED",
+        name: "Starred",
+        icon: "starred",
+        unseen: 0,
+        messages: 0,
+      };
       const withStarred =
         inboxIndex >= 0
-          ? [...mapped.slice(0, inboxIndex + 1), starred, ...mapped.slice(inboxIndex + 1)]
-          : [starred, ...mapped]
-      setFolders(withStarred)
+          ? [
+              ...mapped.slice(0, inboxIndex + 1),
+              starred,
+              ...mapped.slice(inboxIndex + 1),
+            ]
+          : [starred, ...mapped];
+      setFolders(withStarred);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to load folders')
+      push(err instanceof Error ? err.message : "Failed to load folders");
     }
   }
 
   async function loadAliases() {
     try {
-      const { aliases: apiAliases } = await api.getAliases()
-      setAliases(apiAliases)
+      const { aliases: apiAliases } = await api.getAliases();
+      setAliases(apiAliases);
     } catch {
       // non-fatal, aliases are a secondary feature
     }
   }
 
   async function loadMessages(folderId: string) {
-    setLoading(true)
+    setLoading(true);
     try {
-      if (folderId === 'STARRED') {
-        const realFolders = folders.filter((f) => f.id !== 'STARRED')
+      if (folderId === "STARRED") {
+        const realFolders = folders.filter((f) => f.id !== "STARRED");
         const results = await Promise.all(
           realFolders.map(async (f) => {
-            const { messages: apiMessages } = await api.getMessages(f.id)
-            return apiMessages.filter((m) => m.starred).map((m) => toEmailMessage(m, f.id))
+            const { messages: apiMessages } = await api.getMessages(f.id);
+            return apiMessages
+              .filter((m) => m.starred)
+              .map((m) => toEmailMessage(m, f.id));
           }),
-        )
-        const merged = results.flat().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        setMessages(merged)
+        );
+        const merged = results
+          .flat()
+          .sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+          );
+        setMessages(merged);
       } else {
-        const inboxFolder = folders.find((f) => f.icon === '\\Inbox')
-        const sentFolder = folders.find((f) => f.icon === '\\Sent')
+        const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
+        const sentFolder = folders.find((f) => f.icon === "\\Sent");
         if (inboxFolder && sentFolder && folderId === inboxFolder.id) {
           const [inboxRes, sentRes] = await Promise.all([
             api.getMessages(inboxFolder.id),
             api.getMessages(sentFolder.id),
-          ])
-          const inboxMessages = inboxRes.messages.map((m) => toEmailMessage(m, inboxFolder.id))
-          const sentMessages = sentRes.messages.map((m) => toEmailMessage(m, sentFolder.id))
-          setMessages(buildInboxThreads(inboxMessages, sentMessages))
+          ]);
+          const inboxMessages = inboxRes.messages.map((m) =>
+            toEmailMessage(m, inboxFolder.id),
+          );
+          const sentMessages = sentRes.messages.map((m) =>
+            toEmailMessage(m, sentFolder.id),
+          );
+          setMessages(buildInboxThreads(inboxMessages, sentMessages));
         } else {
-          const { messages: apiMessages } = await api.getMessages(folderId)
+          const { messages: apiMessages } = await api.getMessages(folderId);
           setMessages(
             apiMessages
               .map((m) => toEmailMessage(m))
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-          )
+              .sort(
+                (a, b) =>
+                  new Date(b.date).getTime() - new Date(a.date).getTime(),
+              ),
+          );
         }
       }
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to load messages')
+      push(err instanceof Error ? err.message : "Failed to load messages");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     if (email) {
-      loadFolders()
-      loadAliases()
-      api.getUsage().then(setUsage).catch(() => {})
+      loadFolders();
+      loadAliases();
+      api
+        .getUsage()
+        .then(setUsage)
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email])
+  }, [email]);
 
   useEffect(() => {
-    if (email && folders.length > 0) loadMessages(activeFolder)
+    if (email && folders.length > 0) loadMessages(activeFolder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email, activeFolder, folders.length])
+  }, [email, activeFolder, folders.length]);
 
   if (!email) {
     return (
       <Login
         onLogin={(loggedInEmail, loggedInRole) => {
-          setEmail(loggedInEmail)
-          setRole(loggedInRole)
+          setEmail(loggedInEmail);
+          setRole(loggedInRole);
         }}
       />
-    )
+    );
   }
 
   const searchedMessages = query.trim()
@@ -171,164 +219,202 @@ export default function App() {
           m.from.name.toLowerCase().includes(query.toLowerCase()) ||
           m.preview.toLowerCase().includes(query.toLowerCase()),
       )
-    : messages
+    : messages;
 
   const folderMessages = searchedMessages.filter((m) => {
     switch (filter) {
-      case 'unread':
-        return !m.read
-      case 'read':
-        return m.read
-      case 'starred':
-        return m.starred
-      case 'attachments':
-        return (m.attachments?.length ?? 0) > 0
+      case "unread":
+        return !m.read;
+      case "read":
+        return m.read;
+      case "starred":
+        return m.starred;
+      case "attachments":
+        return (m.attachments?.length ?? 0) > 0;
       default:
-        return true
+        return true;
     }
-  })
+  });
 
   // Alias filter is a second, independent axis on top of the folder/pill
   // filters above -- stays active across folder switches so "only mail to
   // sales@..." can be checked in Inbox, then Spam, without re-selecting it.
   const aliasFilteredMessages = activeAlias
     ? folderMessages.filter((m) => {
-        const addr = activeAlias.toLowerCase()
-        return m.to.some((t) => t.toLowerCase() === addr) || (m.cc || []).some((c) => c.toLowerCase() === addr)
+        const addr = activeAlias.toLowerCase();
+        return (
+          m.to.some((t) => t.toLowerCase() === addr) ||
+          (m.cc || []).some((c) => c.toLowerCase() === addr)
+        );
       })
-    : folderMessages
+    : folderMessages;
 
-  const folderLabel = folders.find((f) => f.id === activeFolder)?.name || activeFolder
-  const currentMessageFolder = selectedMessage?.sourceFolder || activeFolder
-  const isSpamFolder = folders.find((f) => f.id === currentMessageFolder)?.icon === '\\Junk'
+  const folderLabel =
+    folders.find((f) => f.id === activeFolder)?.name || activeFolder;
+  const currentMessageFolder = selectedMessage?.sourceFolder || activeFolder;
+  const isSpamFolder =
+    folders.find((f) => f.id === currentMessageFolder)?.icon === "\\Junk";
 
   async function handleSelect(message: EmailMessage) {
-    const folder = message.sourceFolder || activeFolder
-    const isDraft = folders.find((f) => f.id === folder)?.icon === '\\Drafts'
+    const folder = message.sourceFolder || activeFolder;
+    const isDraft = folders.find((f) => f.id === folder)?.icon === "\\Drafts";
     if (isDraft) {
       try {
-        const { message: detail } = await api.getMessage(Number(message.id), folder)
+        const { message: detail } = await api.getMessage(
+          Number(message.id),
+          folder,
+        );
         const attachments = await Promise.all(
-          (detail.attachments || []).map((a) => api.fetchAttachmentAsFile(Number(message.id), folder, a.index, a.name)),
-        )
+          (detail.attachments || []).map((a) =>
+            api.fetchAttachmentAsFile(
+              Number(message.id),
+              folder,
+              a.index,
+              a.name,
+            ),
+          ),
+        );
         setComposeDraft({
-          to: detail.to.join(', '),
-          cc: detail.cc && detail.cc.length > 0 ? detail.cc.join(', ') : undefined,
-          subject: detail.subject === '(no subject)' ? '' : detail.subject,
-          body: detail.body || '',
+          to: detail.to.join(", "),
+          cc:
+            detail.cc && detail.cc.length > 0
+              ? detail.cc.join(", ")
+              : undefined,
+          subject: detail.subject === "(no subject)" ? "" : detail.subject,
+          body: detail.body || "",
           from: email ?? undefined,
           attachments,
           draftUid: Number(message.id),
           draftFolder: folder,
-        })
+        });
       } catch (err) {
-        push(err instanceof Error ? err.message : 'Failed to load draft')
+        push(err instanceof Error ? err.message : "Failed to load draft");
       }
-      return
+      return;
     }
-    setSelectedId(message.id)
+    setSelectedId(message.id);
     try {
       if (message.threadMessages && message.threadMessages.length > 1) {
         const details = await Promise.all(
           message.threadMessages.map(async (m) => {
-            const { message: detail } = await api.getMessage(Number(m.id), m.sourceFolder || folder)
-            return toEmailMessage(detail, m.sourceFolder)
+            const { message: detail } = await api.getMessage(
+              Number(m.id),
+              m.sourceFolder || folder,
+            );
+            return toEmailMessage(detail, m.sourceFolder);
           }),
-        )
-        const sorted = details.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        setSelectedMessage({ ...sorted[sorted.length - 1], threadMessages: sorted })
+        );
+        const sorted = details.sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+        );
+        setSelectedMessage({
+          ...sorted[sorted.length - 1],
+          threadMessages: sorted,
+        });
       } else {
-        const { message: detail } = await api.getMessage(Number(message.id), folder)
-        setSelectedMessage(toEmailMessage(detail, message.sourceFolder))
+        const { message: detail } = await api.getMessage(
+          Number(message.id),
+          folder,
+        );
+        setSelectedMessage(toEmailMessage(detail, message.sourceFolder));
       }
-      setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, read: true } : m)))
-      loadFolders()
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, read: true } : m)),
+      );
+      loadFolders();
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to load message')
+      push(err instanceof Error ? err.message : "Failed to load message");
     }
   }
 
   async function saveDraft(draft: ComposeDraft) {
     try {
-      await api.saveDraft({ ...draft, body: combinedBody(draft) })
-      loadFolders()
-      const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
-      if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
+      await api.saveDraft({ ...draft, body: combinedBody(draft) });
+      loadFolders();
+      const draftsFolderId = folders.find((f) => f.icon === "\\Drafts")?.id;
+      if (draftsFolderId && activeFolder === draftsFolderId)
+        loadMessages(draftsFolderId);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to save draft')
+      push(err instanceof Error ? err.message : "Failed to save draft");
     }
   }
 
   async function handleDeleteDraft(draft: ComposeDraft) {
     if (draft.draftUid == null || !draft.draftFolder) {
-      setComposeDraft(null)
-      return
+      setComposeDraft(null);
+      return;
     }
     try {
-      await api.discardDraft(draft.draftUid, draft.draftFolder)
-      setComposeDraft(null)
-      loadFolders()
-      const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
-      if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
+      await api.discardDraft(draft.draftUid, draft.draftFolder);
+      setComposeDraft(null);
+      loadFolders();
+      const draftsFolderId = folders.find((f) => f.icon === "\\Drafts")?.id;
+      if (draftsFolderId && activeFolder === draftsFolderId)
+        loadMessages(draftsFolderId);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to delete draft')
+      push(err instanceof Error ? err.message : "Failed to delete draft");
     }
   }
 
   async function toggleStar(id: string) {
-    const message = messages.find((m) => m.id === id) || (selectedMessage?.id === id ? selectedMessage : null)
-    if (!message) return
-    const folder = message.sourceFolder || activeFolder
-    const nextStarred = !message.starred
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, starred: nextStarred } : m)))
-    if (selectedMessage?.id === id) setSelectedMessage({ ...selectedMessage, starred: nextStarred })
+    const message =
+      messages.find((m) => m.id === id) ||
+      (selectedMessage?.id === id ? selectedMessage : null);
+    if (!message) return;
+    const folder = message.sourceFolder || activeFolder;
+    const nextStarred = !message.starred;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, starred: nextStarred } : m)),
+    );
+    if (selectedMessage?.id === id)
+      setSelectedMessage({ ...selectedMessage, starred: nextStarred });
     try {
-      await api.setFlag(Number(id), folder, 'starred', nextStarred)
-      if (activeFolder === 'STARRED' && !nextStarred) {
-        setMessages((prev) => prev.filter((m) => m.id !== id))
+      await api.setFlag(Number(id), folder, "starred", nextStarred);
+      if (activeFolder === "STARRED" && !nextStarred) {
+        setMessages((prev) => prev.filter((m) => m.id !== id));
       }
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to update star')
+      push(err instanceof Error ? err.message : "Failed to update star");
     }
   }
 
   function clearSelectionAndRemove(id: string) {
-    setMessages((prev) => prev.filter((m) => m.id !== id))
-    setSelectedId(null)
-    setSelectedMessage(null)
-    loadFolders()
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    setSelectedId(null);
+    setSelectedMessage(null);
+    loadFolders();
   }
 
   async function archiveMessage(id: string) {
-    const message = messages.find((m) => m.id === id)
-    const folder = message?.sourceFolder || activeFolder
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
     try {
-      await api.moveMessage(Number(id), folder, 'Archive')
-      clearSelectionAndRemove(id)
+      await api.moveMessage(Number(id), folder, "Archive");
+      clearSelectionAndRemove(id);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to archive message')
+      push(err instanceof Error ? err.message : "Failed to archive message");
     }
   }
 
   async function markSpam(id: string) {
-    const message = messages.find((m) => m.id === id)
-    const folder = message?.sourceFolder || activeFolder
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
     try {
-      await api.markAsSpam(Number(id), folder)
-      clearSelectionAndRemove(id)
+      await api.markAsSpam(Number(id), folder);
+      clearSelectionAndRemove(id);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to mark as spam')
+      push(err instanceof Error ? err.message : "Failed to mark as spam");
     }
   }
 
   async function markNotSpam(id: string) {
-    const message = messages.find((m) => m.id === id)
-    const folder = message?.sourceFolder || activeFolder
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
     try {
-      await api.markAsNotSpam(Number(id), folder)
-      clearSelectionAndRemove(id)
+      await api.markAsNotSpam(Number(id), folder);
+      clearSelectionAndRemove(id);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to mark as not spam')
+      push(err instanceof Error ? err.message : "Failed to mark as not spam");
     }
   }
 
@@ -336,110 +422,123 @@ export default function App() {
   // thread, not just the representative (latest) one shown in the list --
   // look inside its threadMessages too before falling back to activeFolder.
   function findAnyMessage(id: string): EmailMessage | undefined {
-    if (selectedMessage?.id === id) return selectedMessage
-    return selectedMessage?.threadMessages?.find((m) => m.id === id) || messages.find((m) => m.id === id)
+    if (selectedMessage?.id === id) return selectedMessage;
+    return (
+      selectedMessage?.threadMessages?.find((m) => m.id === id) ||
+      messages.find((m) => m.id === id)
+    );
   }
 
-  async function downloadAttachment(messageId: string, index: number, filename: string) {
-    const message = findAnyMessage(messageId)
-    const folder = message?.sourceFolder || activeFolder
+  async function downloadAttachment(
+    messageId: string,
+    index: number,
+    filename: string,
+  ) {
+    const message = findAnyMessage(messageId);
+    const folder = message?.sourceFolder || activeFolder;
     try {
-      await api.downloadAttachment(Number(messageId), folder, index, filename)
+      await api.downloadAttachment(Number(messageId), folder, index, filename);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to download attachment')
+      push(
+        err instanceof Error ? err.message : "Failed to download attachment",
+      );
     }
   }
 
   async function moveTo(id: string, target: string) {
-    const message = messages.find((m) => m.id === id)
-    const folder = message?.sourceFolder || activeFolder
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
     try {
-      await api.moveMessage(Number(id), folder, target)
-      clearSelectionAndRemove(id)
+      await api.moveMessage(Number(id), folder, target);
+      clearSelectionAndRemove(id);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to move message')
+      push(err instanceof Error ? err.message : "Failed to move message");
     }
   }
 
   async function removeMessage(id: string) {
-    const message = messages.find((m) => m.id === id)
-    const folder = message?.sourceFolder || activeFolder
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
     try {
-      await api.deleteMessage(Number(id), folder)
-      clearSelectionAndRemove(id)
+      await api.deleteMessage(Number(id), folder);
+      clearSelectionAndRemove(id);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to delete message')
+      push(err instanceof Error ? err.message : "Failed to delete message");
     }
   }
 
   async function createFolder(name: string) {
     try {
-      await api.createFolder(name)
-      loadFolders()
+      await api.createFolder(name);
+      loadFolders();
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to create folder')
+      push(err instanceof Error ? err.message : "Failed to create folder");
     }
   }
 
   async function deleteFolder(path: string) {
     try {
-      await api.deleteFolder(path)
-      if (activeFolder === path) setActiveFolder('INBOX')
-      loadFolders()
+      await api.deleteFolder(path);
+      if (activeFolder === path) setActiveFolder("INBOX");
+      loadFolders();
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to delete folder')
+      push(err instanceof Error ? err.message : "Failed to delete folder");
     }
   }
 
   async function createAlias(alias: string) {
-    await api.createAlias(alias)
-    loadAliases()
+    await api.createAlias(alias);
+    loadAliases();
   }
 
   async function deleteAlias(id: number) {
     try {
-      await api.deleteAlias(id)
-      loadAliases()
+      await api.deleteAlias(id);
+      loadAliases();
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to delete alias')
+      push(err instanceof Error ? err.message : "Failed to delete alias");
     }
   }
 
-  function handleReply(message: EmailMessage, mode: 'reply' | 'replyAll' | 'forward') {
+  function handleReply(
+    message: EmailMessage,
+    mode: "reply" | "replyAll" | "forward",
+  ) {
     // Quoted content is kept separate from `body` (see ComposeDraft) so it
     // renders as its own read-only block instead of sharing the textarea
     // with what's actually being typed -- combined back into one string
     // at send time in handleSend.
-    const isForward = mode === 'forward'
+    const isForward = mode === "forward";
     const quoteHeading = isForward
-      ? `---------- Forwarded message ----------\nFrom: ${message.from.name} <${message.from.email}>\nDate: ${new Date(message.date).toLocaleString()}\nSubject: ${message.subject}\nTo: ${message.to.join(', ')}`
-      : `On ${new Date(message.date).toLocaleString()}, ${message.from.name} wrote:`
+      ? `---------- Forwarded message ----------\nFrom: ${message.from.name} <${message.from.email}>\nDate: ${new Date(message.date).toLocaleString()}\nSubject: ${message.subject}\nTo: ${message.to.join(", ")}`
+      : `On ${new Date(message.date).toLocaleString()}, ${message.from.name} wrote:`;
     const quoteBody = message.body
-      .split('\n')
+      .split("\n")
       .map((line) => `> ${line}`)
-      .join('\n')
+      .join("\n");
     // In-Reply-To/References keep the reply threaded to this conversation
     // (both in this webmail's own Inbox+Sent merge and in any other mail
     // client that reads these headers) instead of starting a new one.
     setComposeDraft({
-      to: isForward ? '' : message.from.email,
-      cc: mode === 'replyAll' && message.cc ? message.cc.join(', ') : undefined,
-      subject:
-        isForward
-          ? message.subject.startsWith('Fwd:')
-            ? message.subject
-            : `Fwd: ${message.subject}`
-          : message.subject.startsWith('Re:')
-            ? message.subject
-            : `Re: ${message.subject}`,
-      body: '',
+      to: isForward ? "" : message.from.email,
+      cc: mode === "replyAll" && message.cc ? message.cc.join(", ") : undefined,
+      subject: isForward
+        ? message.subject.startsWith("Fwd:")
+          ? message.subject
+          : `Fwd: ${message.subject}`
+        : message.subject.startsWith("Re:")
+          ? message.subject
+          : `Re: ${message.subject}`,
+      body: "",
       quoteHeading,
       quoteBody,
       inReplyTo: isForward ? undefined : message.messageId,
       references: isForward
         ? undefined
-        : [...(message.references || []), message.messageId].filter((id): id is string => Boolean(id)),
-    })
+        : [...(message.references || []), message.messageId].filter(
+            (id): id is string => Boolean(id),
+          ),
+    });
   }
 
   async function handleSend(draft: ComposeDraft) {
@@ -454,72 +553,77 @@ export default function App() {
         attachments: draft.attachments,
         inReplyTo: draft.inReplyTo,
         references: draft.references,
-      })
+      });
       if (draft.draftUid != null && draft.draftFolder) {
-        await api.discardDraft(draft.draftUid, draft.draftFolder).catch(() => {})
+        await api
+          .discardDraft(draft.draftUid, draft.draftFolder)
+          .catch(() => {});
       }
-      setComposeDraft(null)
-      push('Message sent', 'success')
-      loadFolders()
+      setComposeDraft(null);
+      push("Message sent", "success");
+      loadFolders();
       // Refreshes whatever's currently open -- for the Inbox this re-merges
       // threads so a reply just sent shows up in its conversation right away.
-      loadMessages(activeFolder)
+      loadMessages(activeFolder);
     } catch (err) {
-      push(err instanceof Error ? err.message : 'Failed to send message')
+      push(err instanceof Error ? err.message : "Failed to send message");
     }
   }
 
   async function handleLogout() {
-    await api.logout()
-    setEmail(null)
-    setRole('user')
-    setFolders([])
-    setMessages([])
-    setSelectedId(null)
-    setSelectedMessage(null)
-    setAliases([])
-    setActiveAlias(null)
+    await api.logout();
+    setEmail(null);
+    setRole("user");
+    setFolders([]);
+    setMessages([]);
+    setSelectedId(null);
+    setSelectedMessage(null);
+    setAliases([]);
+    setActiveAlias(null);
   }
 
   function handleResizeStart(e: React.MouseEvent) {
-    e.preventDefault()
-    resizingRef.current = true
-    const startX = e.clientX
-    const startWidth = listWidth
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
+    e.preventDefault();
+    resizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = listWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
 
     function clamp(width: number) {
-      return Math.min(LIST_WIDTH_MAX, Math.max(LIST_WIDTH_MIN, width))
+      return Math.min(LIST_WIDTH_MAX, Math.max(LIST_WIDTH_MIN, width));
     }
     function onMove(moveEvent: MouseEvent) {
-      if (!resizingRef.current) return
-      setListWidthState(clamp(startWidth + (moveEvent.clientX - startX)))
+      if (!resizingRef.current) return;
+      setListWidthState(clamp(startWidth + (moveEvent.clientX - startX)));
     }
     function onUp(upEvent: MouseEvent) {
-      resizingRef.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-      persistListWidth(clamp(startWidth + (upEvent.clientX - startX)))
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      resizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      persistListWidth(clamp(startWidth + (upEvent.clientX - startX)));
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div
+      className="flex h-screen w-full overflow-hidden"
+      style={{ background: "var(--bg)" }}
+    >
       <Sidebar
         folders={folders}
         activeFolder={activeFolder}
         onSelectFolder={(id) => {
-          setActiveFolder(id)
-          setSelectedId(null)
-          setSelectedMessage(null)
-          setFilter('all')
+          setActiveFolder(id);
+          setSelectedId(null);
+          setSelectedMessage(null);
+          setFilter("all");
         }}
-        onCompose={() => setComposeDraft({ to: '', subject: '', body: '' })}
+        onCompose={() => setComposeDraft({ to: "", subject: "", body: "" })}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onCreateFolder={createFolder}
@@ -528,7 +632,9 @@ export default function App() {
         usage={usage}
         aliases={aliases}
         activeAlias={activeAlias}
-        onSelectAlias={(source) => setActiveAlias((prev) => (prev === source ? null : source))}
+        onSelectAlias={(source) =>
+          setActiveAlias((prev) => (prev === source ? null : source))
+        }
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -537,18 +643,20 @@ export default function App() {
           onQueryChange={setQuery}
           theme={theme}
           onToggleTheme={() => {
-            const next = theme === 'dark' ? 'light' : 'dark'
-            setTheme(next)
-            document.documentElement.setAttribute('data-theme', next)
+            const next = theme === "dark" ? "light" : "dark";
+            setTheme(next);
+            document.documentElement.setAttribute("data-theme", next);
           }}
           onToggleSidebar={() => setSidebarOpen(true)}
           email={email}
-          adminUrl={role !== 'user' ? '/admin' : undefined}
+          adminUrl={role !== "user" ? "/admin" : undefined}
           onLogout={handleLogout}
         />
 
         <div className="flex min-h-0 flex-1">
-          <div className={`${selectedMessage ? 'hidden md:flex' : 'flex'} w-full md:w-auto`}>
+          <div
+            className={`${selectedMessage ? "hidden md:flex" : "flex"} w-full md:w-auto`}
+          >
             <MessageList
               messages={aliasFilteredMessages}
               selectedId={selectedId}
@@ -566,10 +674,12 @@ export default function App() {
           <div
             onMouseDown={handleResizeStart}
             className="hidden w-1 shrink-0 cursor-col-resize md:block"
-            style={{ background: 'var(--border)' }}
+            style={{ background: "var(--border)" }}
           />
 
-          <div className={`${selectedMessage ? 'flex' : 'hidden md:flex'} min-w-0 flex-1`}>
+          <div
+            className={`${selectedMessage ? "flex" : "hidden md:flex"} min-w-0 flex-1`}
+          >
             <ReadingPane
               message={selectedMessage}
               folders={folders}
@@ -583,8 +693,8 @@ export default function App() {
               onDownloadAttachment={downloadAttachment}
               onReply={handleReply}
               onBack={() => {
-                setSelectedId(null)
-                setSelectedMessage(null)
+                setSelectedId(null);
+                setSelectedMessage(null);
               }}
             />
           </div>
@@ -598,7 +708,7 @@ export default function App() {
           onSaveDraft={saveDraft}
           onSend={handleSend}
           onDeleteDraft={handleDeleteDraft}
-          onValidationError={(message) => push(message, 'error')}
+          onValidationError={(message) => push(message, "error")}
           primaryEmail={email}
           aliases={aliases.map((a) => a.source)}
         />
@@ -615,5 +725,5 @@ export default function App() {
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
-  )
+  );
 }
