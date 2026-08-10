@@ -14,8 +14,10 @@ import {
   ChevronRight,
   ChevronDown,
   Folder,
+  X,
 } from 'lucide-react'
 import type { FolderInfo } from '../types'
+import type { ApiAlias } from '../api'
 import { formatBytes } from '../utils'
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -43,6 +45,9 @@ interface SidebarProps {
   onDeleteFolder: (path: string) => void
   onOpenAliases: () => void
   usage: { usedBytes: number | null; quotaMb: number | null } | null
+  aliases: ApiAlias[]
+  activeAlias: string | null
+  onSelectAlias: (source: string) => void
 }
 
 export function Sidebar({
@@ -56,8 +61,12 @@ export function Sidebar({
   onDeleteFolder,
   onOpenAliases,
   usage,
+  aliases,
+  activeAlias,
+  onSelectAlias,
 }: SidebarProps) {
   const [customFoldersOpen, setCustomFoldersOpen] = useState(true)
+  const [aliasesFilterOpen, setAliasesFilterOpen] = useState(true)
 
   function handleNewFolder() {
     const name = window.prompt('New folder name')
@@ -203,6 +212,55 @@ export function Sidebar({
             <Plus size={17} />
             <span>New folder</span>
           </button>
+
+          {aliases.length > 0 && (
+            <>
+              <button
+                onClick={() => setAliasesFilterOpen((v) => !v)}
+                className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide transition"
+                style={{ color: 'var(--text-faint)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                {aliasesFilterOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <AtSign size={14} />
+                <span className="flex-1 text-left">Aliases</span>
+              </button>
+              {aliasesFilterOpen && (
+                <div className="flex flex-col gap-0.5 pl-2">
+                  {aliases.map((alias) => {
+                    const isActive = activeAlias === alias.source
+                    return (
+                      <button
+                        key={alias.id}
+                        onClick={() => onSelectAlias(alias.source)}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition"
+                        style={{
+                          background: isActive ? 'var(--bg-selected)' : 'transparent',
+                          color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+                          fontWeight: isActive ? 600 : 500,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) e.currentTarget.style.background = 'transparent'
+                        }}
+                        title={
+                          isActive
+                            ? `Showing only mail to ${alias.source} -- click to clear`
+                            : `Show only mail to ${alias.source}`
+                        }
+                      >
+                        <span className="flex-1 truncate text-left">{alias.source}</span>
+                        {isActive && <X size={13} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </nav>
 
         <div className="mt-auto flex flex-col gap-2 border-t px-2 pt-3" style={{ borderColor: 'var(--border)' }}>

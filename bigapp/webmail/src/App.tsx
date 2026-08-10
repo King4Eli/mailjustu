@@ -40,6 +40,16 @@ function toFolderInfo(f: ApiFolder): FolderInfo {
   return { id: f.path, name, icon: f.specialUse || 'inbox', unseen: f.unseen, messages: f.messages }
 }
 
+// ComposeModal renders the quoted previous message as its own read-only
+// block, separate from `body` (see ComposeDraft) -- but IMAP/SMTP only
+// carry one plain-text body, so fold them back into one string wherever a
+// draft is actually sent or saved.
+function combinedBody(draft: ComposeDraft): string {
+  return draft.quoteBody
+    ? `${draft.body.trim()}\n\n${draft.quoteHeading ? `${draft.quoteHeading}\n` : ''}${draft.quoteBody}`
+    : draft.body
+}
+
 export default function App() {
   const [email, setEmail] = useState<string | null>(() => api.getStoredSession()?.email ?? null)
   const [role, setRole] = useState<'super' | 'domain' | 'user'>(() => api.getStoredSession()?.role ?? 'user')
@@ -59,6 +69,7 @@ export default function App() {
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null)
   const [aliases, setAliases] = useState<ApiAlias[]>([])
   const [aliasesOpen, setAliasesOpen] = useState(false)
+  const [activeAlias, setActiveAlias] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ usedBytes: number | null; quotaMb: number | null } | null>(null)
   const [listWidth, setListWidthState] = useState(() => getListWidth())
   const resizingRef = useRef(false)
@@ -177,6 +188,16 @@ export default function App() {
     }
   })
 
+  // Alias filter is a second, independent axis on top of the folder/pill
+  // filters above -- stays active across folder switches so "only mail to
+  // sales@..." can be checked in Inbox, then Spam, without re-selecting it.
+  const aliasFilteredMessages = activeAlias
+    ? folderMessages.filter((m) => {
+        const addr = activeAlias.toLowerCase()
+        return m.to.some((t) => t.toLowerCase() === addr) || (m.cc || []).some((c) => c.toLowerCase() === addr)
+      })
+    : folderMessages
+
   const folderLabel = folders.find((f) => f.id === activeFolder)?.name || activeFolder
   const currentMessageFolder = selectedMessage?.sourceFolder || activeFolder
   const isSpamFolder = folders.find((f) => f.id === currentMessageFolder)?.icon === '\\Junk'
@@ -229,7 +250,7 @@ export default function App() {
 
   async function saveDraft(draft: ComposeDraft) {
     try {
-      await api.saveDraft(draft)
+      await api.saveDraft({ ...draft, body: combinedBody(draft) })
       loadFolders()
       const draftsFolderId = folders.find((f) => f.icon === '\\Drafts')?.id
       if (draftsFolderId && activeFolder === draftsFolderId) loadMessages(draftsFolderId)
@@ -385,14 +406,21 @@ export default function App() {
   }
 
   function handleReply(message: EmailMessage, mode: 'reply' | 'replyAll' | 'forward') {
-    const quoted = `\n\nOn ${new Date(message.date).toLocaleString()}, ${message.from.name} wrote:\n${message.body
+    // Quoted content is kept separate from `body` (see ComposeDraft) so it
+    // renders as its own read-only block instead of sharing the textarea
+    // with what's actually being typed -- combined back into one string
+    // at send time in handleSend.
+    const isForward = mode === 'forward'
+    const quoteHeading = isForward
+      ? `---------- Forwarded message ----------\nFrom: ${message.from.name} <${message.from.email}>\nDate: ${new Date(message.date).toLocaleString()}\nSubject: ${message.subject}\nTo: ${message.to.join(', ')}`
+      : `On ${new Date(message.date).toLocaleString()}, ${message.from.name} wrote:`
+    const quoteBody = message.body
       .split('\n')
       .map((line) => `> ${line}`)
-      .join('\n')}`
+      .join('\n')
     // In-Reply-To/References keep the reply threaded to this conversation
     // (both in this webmail's own Inbox+Sent merge and in any other mail
     // client that reads these headers) instead of starting a new one.
-    const isForward = mode === 'forward'
     setComposeDraft({
       to: isForward ? '' : message.from.email,
       cc: mode === 'replyAll' && message.cc ? message.cc.join(', ') : undefined,
@@ -404,7 +432,9 @@ export default function App() {
           : message.subject.startsWith('Re:')
             ? message.subject
             : `Re: ${message.subject}`,
-      body: quoted,
+      body: '',
+      quoteHeading,
+      quoteBody,
       inReplyTo: isForward ? undefined : message.messageId,
       references: isForward
         ? undefined
@@ -419,7 +449,7 @@ export default function App() {
         cc: draft.cc,
         bcc: draft.bcc,
         subject: draft.subject,
-        body: draft.body,
+        body: combinedBody(draft),
         from: draft.from,
         attachments: draft.attachments,
         inReplyTo: draft.inReplyTo,
@@ -448,6 +478,7 @@ export default function App() {
     setSelectedId(null)
     setSelectedMessage(null)
     setAliases([])
+    setActiveAlias(null)
   }
 
   function handleResizeStart(e: React.MouseEvent) {
@@ -495,6 +526,9 @@ export default function App() {
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
         usage={usage}
+        aliases={aliases}
+        activeAlias={activeAlias}
+        onSelectAlias={(source) => setActiveAlias((prev) => (prev === source ? null : source))}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -516,7 +550,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1">
           <div className={`${selectedMessage ? 'hidden md:flex' : 'flex'} w-full md:w-auto`}>
             <MessageList
-              messages={folderMessages}
+              messages={aliasFilteredMessages}
               selectedId={selectedId}
               onSelect={handleSelect}
               onToggleStar={toggleStar}
@@ -524,6 +558,8 @@ export default function App() {
               filter={filter}
               onFilterChange={setFilter}
               width={listWidth}
+              activeAliasFilter={activeAlias}
+              onClearAliasFilter={() => setActiveAlias(null)}
             />
           </div>
 

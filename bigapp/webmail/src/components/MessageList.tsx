@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Star, Paperclip } from 'lucide-react'
+import { Star, Paperclip, AtSign, X } from 'lucide-react'
 import type { EmailMessage, MessageFilter } from '../types'
 import { formatListDate, initials, avatarColor } from '../utils'
 
@@ -14,6 +14,11 @@ interface MessageListProps {
   // User-resizable (see App.tsx's drag handle) -- only applied at the md+
   // breakpoint; below that this column is always full-width.
   width: number
+  // Set when a sidebar alias is selected -- narrows `messages` (already
+  // filtered by the caller) down to mail addressed to that alias, across
+  // whichever folder is active.
+  activeAliasFilter: string | null
+  onClearAliasFilter: () => void
 }
 
 function useIsMdUp() {
@@ -44,6 +49,8 @@ export function MessageList({
   filter,
   onFilterChange,
   width,
+  activeAliasFilter,
+  onClearAliasFilter,
 }: MessageListProps) {
   const isMdUp = useIsMdUp()
   return (
@@ -62,6 +69,19 @@ export function MessageList({
           {messages.length} {messages.length === 1 ? 'message' : 'messages'}
         </span>
       </div>
+
+      {activeAliasFilter && (
+        <div
+          className="flex items-center gap-2 border-b px-4 py-2 text-xs font-medium"
+          style={{ borderColor: 'var(--border)', background: 'var(--accent-soft)', color: 'var(--accent)' }}
+        >
+          <AtSign size={13} className="shrink-0" />
+          <span className="flex-1 truncate">Only mail to {activeAliasFilter}</span>
+          <button onClick={onClearAliasFilter} className="flex shrink-0 items-center gap-1 hover:opacity-80" title="Clear alias filter">
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       <div
         className="flex items-center gap-1 overflow-x-auto border-b px-3 py-2"
