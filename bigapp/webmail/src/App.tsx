@@ -196,6 +196,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
+  // Registered once -- api.ts calls this the moment any request comes back
+  // 401, so an expired session drops straight to the Login screen instead
+  // of leaving the app rendered with stale data and a toast per failed
+  // request. Only resets local React state (see handleLogout for the
+  // explicit sign-out path, which also calls the server) -- the token's
+  // already invalid server-side, so there's nothing left to tell it.
+  useEffect(() => {
+    api.onSessionExpired(resetLocalSession);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (email && folders.length > 0) loadMessages(activeFolder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -500,6 +511,22 @@ export default function App() {
     }
   }
 
+  // A message may have arrived at an alias rather than the primary
+  // address (e.g. sales@... forwarding into this mailbox) -- default the
+  // reply's From to whichever of the user's own addresses it was actually
+  // sent to, so the reply goes out under the identity the sender used,
+  // not always the primary one. Falls back to the primary address.
+  function pickReplyFrom(message: EmailMessage): string | undefined {
+    const recipients = [...message.to, ...(message.cc || [])].map((a) =>
+      a.toLowerCase(),
+    );
+    const aliasMatch = aliases.find((a) =>
+      recipients.includes(a.source.toLowerCase()),
+    );
+    if (aliasMatch) return aliasMatch.source;
+    return email ?? undefined;
+  }
+
   function handleReply(
     message: EmailMessage,
     mode: "reply" | "replyAll" | "forward",
@@ -522,6 +549,7 @@ export default function App() {
     setComposeDraft({
       to: isForward ? "" : message.from.email,
       cc: mode === "replyAll" && message.cc ? message.cc.join(", ") : undefined,
+      from: pickReplyFrom(message),
       subject: isForward
         ? message.subject.startsWith("Fwd:")
           ? message.subject
@@ -570,8 +598,7 @@ export default function App() {
     }
   }
 
-  async function handleLogout() {
-    await api.logout();
+  function resetLocalSession() {
     setEmail(null);
     setRole("user");
     setFolders([]);
@@ -580,6 +607,11 @@ export default function App() {
     setSelectedMessage(null);
     setAliases([]);
     setActiveAlias(null);
+  }
+
+  async function handleLogout() {
+    await api.logout();
+    resetLocalSession();
   }
 
   function handleResizeStart(e: React.MouseEvent) {

@@ -33,6 +33,17 @@ function clearSession() {
 
 class ApiError extends Error {}
 
+// App.tsx registers a listener on mount that resets its React state back to
+// "logged out" -- fired synchronously as soon as any request comes back 401,
+// so the UI drops straight to the Login screen instead of leaving the app
+// rendered (and every subsequent request toasting its own "session expired"
+// error) with a stale, no-longer-valid session.
+let sessionExpiredHandler: (() => void) | null = null;
+
+export function onSessionExpired(handler: () => void) {
+  sessionExpiredHandler = handler;
+}
+
 async function apiFetch(path: string, options: RequestInit = {}) {
   const session = getStoredSession();
   const isFormData = options.body instanceof FormData;
@@ -48,6 +59,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   });
   if (res.status === 401) {
     clearSession();
+    sessionExpiredHandler?.();
     throw new ApiError("Session expired, please sign in again");
   }
   if (!res.ok) {
