@@ -23,12 +23,20 @@ const ACTION_LABELS: Record<MailFilter["action"], string> = {
   delete: "Delete it",
   mark_read: "Mark as read",
   star: "Star it",
+  allow: "Always allow it through",
 };
 
 function describeFilter(f: MailFilter): string {
-  const match = f.match_type === "equals" ? "is" : "contains";
+  const match =
+    f.match_type === "equals"
+      ? "is"
+      : f.match_type === "domain"
+        ? "is from domain"
+        : "contains";
   const action =
-    f.action === "move" ? `${ACTION_LABELS.move} ${f.action_folder}` : ACTION_LABELS[f.action];
+    f.action === "move"
+      ? `${ACTION_LABELS.move} ${f.action_folder}`
+      : ACTION_LABELS[f.action];
   return `If ${FIELD_LABELS[f.field]} ${match} "${f.value}" → ${action}`;
 }
 
@@ -42,7 +50,8 @@ export function FiltersModal({
 }: FiltersModalProps) {
   const [name, setName] = useState("");
   const [field, setField] = useState<MailFilter["field"]>("from");
-  const [matchType, setMatchType] = useState<MailFilter["match_type"]>("contains");
+  const [matchType, setMatchType] =
+    useState<MailFilter["match_type"]>("contains");
   const [value, setValue] = useState("");
   const [action, setAction] = useState<MailFilter["action"]>("move");
   const [actionFolder, setActionFolder] = useState("");
@@ -105,9 +114,9 @@ export function FiltersModal({
         </div>
 
         <p className="mb-3 text-xs" style={{ color: "var(--text-faint)" }}>
-          Runs on the server as new mail arrives -- applies even when this
-          app is closed, and from any other mail client on this account.
-          Each message is handled by its first matching rule.
+          Runs on the server as new mail arrives -- applies even when this app
+          is closed, and from any other mail client on this account. Each
+          message is handled by its first matching rule.
         </p>
 
         <form
@@ -155,6 +164,7 @@ export function FiltersModal({
             >
               <option value="contains">contains</option>
               <option value="equals">is exactly</option>
+              <option value="domain">is from domain</option>
             </select>
           </div>
           <input
@@ -171,7 +181,9 @@ export function FiltersModal({
           <div className="flex gap-2">
             <select
               value={action}
-              onChange={(e) => setAction(e.target.value as MailFilter["action"])}
+              onChange={(e) =>
+                setAction(e.target.value as MailFilter["action"])
+              }
               className="flex-1 rounded-lg border px-2 py-2 text-sm outline-none"
               style={{
                 borderColor: "var(--border)",
@@ -183,6 +195,7 @@ export function FiltersModal({
               <option value="delete">Delete it</option>
               <option value="mark_read">Mark as read</option>
               <option value="star">Star it</option>
+              <option value="allow">Always allow it through</option>
             </select>
             {action === "move" && (
               <select

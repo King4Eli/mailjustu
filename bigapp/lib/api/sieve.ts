@@ -6,9 +6,9 @@ export interface FilterRuleRow extends RowDataPacket {
   id: number;
   name: string;
   field: "from" | "to" | "subject";
-  match_type: "contains" | "equals";
+  match_type: "contains" | "equals" | "domain";
   value: string;
-  action: "move" | "delete" | "mark_read" | "star";
+  action: "move" | "delete" | "mark_read" | "star" | "allow";
   action_folder: string | null;
   position: number;
   enabled: boolean;
@@ -24,7 +24,17 @@ function sieveQuote(s: string): string {
 }
 
 export function generateSieveScript(rules: FilterRuleRow[]): string {
+  // "allow" rules always run first, ahead of everything else regardless
+  // of their row position -- an allow-listed sender should win over a
+  // block/move rule that would also match them, not lose to it just
+  // because that rule happens to sit earlier in the list. Within each
+  // group, original position order is preserved.
   const active = rules.filter((r) => r.enabled);
+  const ordered = [
+    ...active.filter((r) => r.action === "allow"),
+    ...active.filter((r) => r.action !== "allow"),
+  ];
+
   const requires = new Set<string>(["fileinto"]);
   if (active.some((r) => r.action === "move")) requires.add("mailbox");
   if (active.some((r) => r.action === "mark_read" || r.action === "star"))
@@ -35,11 +45,17 @@ export function generateSieveScript(rules: FilterRuleRow[]): string {
     "",
   ];
 
-  for (const rule of active) {
+  for (const rule of ordered) {
+    // "domain" is a wildcard match ("*@spammer.com"), not a plain
+    // substring -- :contains would also (usually harmlessly, but
+    // needlessly loosely) match "spammer.com" appearing anywhere in the
+    // header, not just as the address's actual domain.
     const test =
       rule.match_type === "equals"
         ? `header :is ${sieveQuote(rule.field)} ${sieveQuote(rule.value)}`
-        : `header :contains ${sieveQuote(rule.field)} ${sieveQuote(rule.value)}`;
+        : rule.match_type === "domain"
+          ? `header :matches ${sieveQuote(rule.field)} ${sieveQuote(`*@${rule.value}`)}`
+          : `header :contains ${sieveQuote(rule.field)} ${sieveQuote(rule.value)}`;
     lines.push(`# ${rule.name}`, `if ${test} {`);
     switch (rule.action) {
       case "move":
@@ -55,6 +71,9 @@ export function generateSieveScript(rules: FilterRuleRow[]): string {
         break;
       case "star":
         lines.push(`  setflag "\\\\Flagged";`, `  keep;`);
+        break;
+      case "allow":
+        lines.push(`  keep;`);
         break;
     }
     // Sieve otherwise keeps testing later rules against the same message

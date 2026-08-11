@@ -92,9 +92,17 @@ CREATE TABLE IF NOT EXISTS mail_filters (
   mailbox_email VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   field ENUM('from', 'to', 'subject') NOT NULL,
-  match_type ENUM('contains', 'equals') NOT NULL DEFAULT 'contains',
+  -- 'domain' stores a bare domain in `value` (e.g. "spammer.com") and
+  -- compiles to a Sieve :matches "*@value" wildcard test, not a plain
+  -- substring -- see lib/api/sieve.ts. Whole-domain block/allow entries
+  -- from the Allow/Block lists panel use this.
+  match_type ENUM('contains', 'equals', 'domain') NOT NULL DEFAULT 'contains',
   value VARCHAR(255) NOT NULL,
-  action ENUM('move', 'delete', 'mark_read', 'star') NOT NULL,
+  -- 'allow' is the block-list's counterpart: an explicit keep+stop, always
+  -- sorted to run before every other action when the script is generated
+  -- (see lib/api/sieve.ts) so an allowed sender wins over a block rule
+  -- that would otherwise also match it, regardless of row position.
+  action ENUM('move', 'delete', 'mark_read', 'star', 'allow') NOT NULL,
   action_folder VARCHAR(255) NULL,
   position INT NOT NULL DEFAULT 0,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,

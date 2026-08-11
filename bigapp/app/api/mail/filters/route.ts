@@ -6,8 +6,12 @@ import { regenerateAndInstallFilters } from "@/lib/api/sieve";
 import type { RowDataPacket } from "mysql2";
 
 const FIELDS = new Set(["from", "to", "subject"]);
-const MATCH_TYPES = new Set(["contains", "equals"]);
-const ACTIONS = new Set(["move", "delete", "mark_read", "star"]);
+const MATCH_TYPES = new Set(["contains", "equals", "domain"]);
+const ACTIONS = new Set(["move", "delete", "mark_read", "star", "allow"]);
+// A "domain" value must be a bare domain (no @, no local part) -- it gets
+// wrapped as "*@value" for a Sieve :matches test (see lib/api/sieve.ts),
+// so an "@" here would silently produce a pattern that can never match.
+const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 
 export async function GET(req: NextRequest) {
   return withApiErrors(async () => {
@@ -32,12 +36,15 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) || {};
     const { name, field, matchType, value, action, actionFolder } = body;
     if (!name?.trim()) return apiError(400, "name is required");
-    if (!FIELDS.has(field)) return apiError(400, "field must be from/to/subject");
+    if (!FIELDS.has(field))
+      return apiError(400, "field must be from/to/subject");
     if (!MATCH_TYPES.has(matchType))
-      return apiError(400, "matchType must be contains/equals");
+      return apiError(400, "matchType must be contains/equals/domain");
     if (!value?.trim()) return apiError(400, "value is required");
+    if (matchType === "domain" && !DOMAIN_PATTERN.test(value.trim()))
+      return apiError(400, "value must be a bare domain, e.g. spammer.com");
     if (!ACTIONS.has(action))
-      return apiError(400, "action must be move/delete/mark_read/star");
+      return apiError(400, "action must be move/delete/mark_read/star/allow");
     if (action === "move" && !actionFolder?.trim())
       return apiError(400, "actionFolder is required for a move action");
 

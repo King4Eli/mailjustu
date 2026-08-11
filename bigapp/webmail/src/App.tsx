@@ -7,6 +7,7 @@ import { ComposeModal, type ComposeDraft } from "./components/ComposeModal";
 import { AliasesModal } from "./components/AliasesModal";
 import { SignatureModal } from "./components/SignatureModal";
 import { FiltersModal } from "./components/FiltersModal";
+import { BlockListModal } from "./components/BlockListModal";
 import { Login } from "./components/Login";
 import { useToasts, ToastStack } from "./components/Toast";
 import * as api from "./api";
@@ -150,6 +151,7 @@ export default function App() {
   const [aliasesOpen, setAliasesOpen] = useState(false);
   const [filters, setFilters] = useState<MailFilter[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [blockListOpen, setBlockListOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [activeAlias, setActiveAlias] = useState<string | null>(null);
   // Accumulates (email -> display name) across every folder/message this
@@ -1015,6 +1017,116 @@ export default function App() {
     }
   }
 
+  // One-click "Block sender" -- installs a real server-side block rule
+  // (future mail from this exact address is discarded at delivery, see
+  // lib/api/sieve.ts) and also gets the already-arrived message out of
+  // the inbox, matching how Gmail/Outlook's "Block sender" behaves.
+  // Shared by the three quick-action toolbar buttons below (Block sender,
+  // Block domain, Allow sender) -- installs one "from" rule and shows an
+  // Undo toast that removes it again by id. `andTrash` additionally moves
+  // the currently-open message to Trash, which only makes sense for block
+  // actions (Gmail/Outlook-style "block sender" also clears the one
+  // that's already in front of you); allow doesn't touch it.
+  async function quickSenderFilter(opts: {
+    value: string;
+    matchType: "equals" | "domain";
+    action: "delete" | "allow";
+    label: string;
+    andTrash?: string;
+  }) {
+    try {
+      const { id } = await api.createFilter({
+        name: `${opts.action === "delete" ? "Blocked" : "Allowed"}${opts.matchType === "domain" ? " domain" : ""}: ${opts.value}`,
+        field: "from",
+        matchType: opts.matchType,
+        value: opts.value,
+        action: opts.action,
+      });
+      loadFilters();
+      if (opts.andTrash) await removeMessage(opts.andTrash);
+      push(opts.label, "success", {
+        actionLabel: "Undo",
+        onAction: () => {
+          api.deleteFilter(id).then(
+            () => {
+              loadFilters();
+              push("Removed", "success");
+            },
+            () => push("Failed to undo", "error"),
+          );
+        },
+      });
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to update filters");
+    }
+  }
+
+  function blockSender(message: EmailMessage) {
+    const senderEmail = message.from.email;
+    if (!senderEmail) return;
+    quickSenderFilter({
+      value: senderEmail,
+      matchType: "equals",
+      action: "delete",
+      label: `Blocked ${senderEmail}`,
+      andTrash: message.id,
+    });
+  }
+
+  function blockDomain(message: EmailMessage) {
+    const domain = message.from.email.split("@")[1];
+    if (!domain) return;
+    quickSenderFilter({
+      value: domain,
+      matchType: "domain",
+      action: "delete",
+      label: `Blocked everyone at ${domain}`,
+      andTrash: message.id,
+    });
+  }
+
+  function allowSender(message: EmailMessage) {
+    const senderEmail = message.from.email;
+    if (!senderEmail) return;
+    quickSenderFilter({
+      value: senderEmail,
+      matchType: "equals",
+      action: "allow",
+      label: `Allowed ${senderEmail}`,
+    });
+  }
+
+  // Allow/Block lists modal -- same underlying mail_filters mechanism as
+  // blockSender above and the general Filters modal, just pre-configured
+  // for the common "exact sender address" case.
+  async function addBlockedSender(
+    value: string,
+    matchType: "equals" | "domain" = "equals",
+  ) {
+    await api.createFilter({
+      name: matchType === "domain" ? `Blocked domain: ${value}` : `Blocked: ${value}`,
+      field: "from",
+      matchType,
+      value,
+      action: "delete",
+    });
+    loadFilters();
+  }
+
+  async function addAllowedSender(
+    value: string,
+    matchType: "equals" | "domain" = "equals",
+  ) {
+    await api.createFilter({
+      name: matchType === "domain" ? `Allowed domain: ${value}` : `Allowed: ${value}`,
+      field: "from",
+      matchType,
+      value,
+      action: "allow",
+    });
+    loadFilters();
+  }
+
   // A message may have arrived at an alias rather than the primary
   // address (e.g. sales@... forwarding into this mailbox) -- default the
   // reply's From to whichever of the user's own addresses it was actually
@@ -1221,6 +1333,7 @@ export default function App() {
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
         onOpenFilters={() => setFiltersOpen(true)}
+        onOpenBlockList={() => setBlockListOpen(true)}
         usage={usage}
         aliases={aliases}
         activeAlias={activeAlias}
@@ -1301,6 +1414,9 @@ export default function App() {
               onDelete={removeMessage}
               onMarkSpam={markSpam}
               onMarkNotSpam={markNotSpam}
+              onBlockSender={blockSender}
+              onBlockDomain={blockDomain}
+              onAllowSender={allowSender}
               isSpamFolder={isSpamFolder}
               onMoveTo={moveTo}
               onSnooze={snoozeMessage}
@@ -1361,6 +1477,16 @@ export default function App() {
           onCreate={createFilter}
           onToggle={toggleFilter}
           onDelete={deleteFilterRule}
+        />
+      )}
+
+      {blockListOpen && (
+        <BlockListModal
+          filters={filters}
+          onClose={() => setBlockListOpen(false)}
+          onAddBlocked={addBlockedSender}
+          onAddAllowed={addAllowedSender}
+          onRemove={deleteFilterRule}
         />
       )}
 

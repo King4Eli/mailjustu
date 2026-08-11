@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Clock,
   Filter,
+  Ban,
 } from "lucide-react";
 import type { FolderInfo } from "../types";
 import type { ApiAlias } from "../api";
@@ -54,6 +55,7 @@ interface SidebarProps {
   onDeleteFolder: (path: string) => void;
   onOpenAliases: () => void;
   onOpenFilters: () => void;
+  onOpenBlockList: () => void;
   usage: { usedBytes: number | null; quotaMb: number | null } | null;
   aliases: ApiAlias[];
   activeAlias: string | null;
@@ -73,6 +75,7 @@ export function Sidebar({
   onDeleteFolder,
   onOpenAliases,
   onOpenFilters,
+  onOpenBlockList,
   usage,
   aliases,
   activeAlias,
@@ -80,8 +83,8 @@ export function Sidebar({
   onRefresh,
   refreshing,
 }: SidebarProps) {
-  const [customFoldersOpen, setCustomFoldersOpen] = useState(true);
-  const [aliasesFilterOpen, setAliasesFilterOpen] = useState(true);
+  const [customFoldersOpen, setCustomFoldersOpen] = useState(false);
+  const [aliasesFilterOpen, setAliasesFilterOpen] = useState(false);
 
   function handleNewFolder() {
     const name = window.prompt("New folder name");
@@ -367,6 +370,14 @@ export function Sidebar({
           >
             <Filter size={15} />
             <span>Mail filters</span>
+          </button>
+          <button
+            onClick={onOpenBlockList}
+            className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
+            style={{ color: "var(--text-faint)" }}
+          >
+            <Ban size={15} />
+            <span>Allow &amp; block lists</span>
           </button>
           {usage?.usedBytes != null && (
             <div className="px-1 py-1">

@@ -396,9 +396,9 @@ export interface MailFilter {
   id: number;
   name: string;
   field: "from" | "to" | "subject";
-  match_type: "contains" | "equals";
+  match_type: "contains" | "equals" | "domain";
   value: string;
-  action: "move" | "delete" | "mark_read" | "star";
+  action: "move" | "delete" | "mark_read" | "star" | "allow";
   action_folder: string | null;
   position: number;
   enabled: boolean;
@@ -421,7 +421,9 @@ export function getFilters(): Promise<{ filters: MailFilter[] }> {
   return apiFetch("/mail/filters");
 }
 
-export function createFilter(input: MailFilterInput) {
+export function createFilter(
+  input: MailFilterInput,
+): Promise<{ ok: boolean; id: number }> {
   return apiFetch("/mail/filters", {
     method: "POST",
     body: JSON.stringify(input),

@@ -16,6 +16,9 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Ban,
+  UserCheck,
+  Globe,
 } from "lucide-react";
 import type { EmailMessage, FolderInfo } from "../types";
 import { formatFullDate, initials, avatarColor } from "../utils";
@@ -265,6 +268,9 @@ interface ReadingPaneProps {
   onDelete: (id: string) => void;
   onMarkSpam: (id: string) => void;
   onMarkNotSpam: (id: string) => void;
+  onBlockSender: (message: EmailMessage) => void;
+  onBlockDomain: (message: EmailMessage) => void;
+  onAllowSender: (message: EmailMessage) => void;
   isSpamFolder: boolean;
   onMoveTo: (id: string, path: string) => void;
   onSnooze: (id: string, wakeAt: Date) => void;
@@ -290,6 +296,9 @@ export function ReadingPane({
   onDelete,
   onMarkSpam,
   onMarkNotSpam,
+  onBlockSender,
+  onBlockDomain,
+  onAllowSender,
   isSpamFolder,
   onMoveTo,
   onSnooze,
@@ -302,6 +311,8 @@ export function ReadingPane({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const snoozeRef = useRef<HTMLDivElement>(null);
+  const [blockMenuOpen, setBlockMenuOpen] = useState(false);
+  const blockMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (message?.threadMessages && message.threadMessages.length > 1) {
@@ -318,6 +329,19 @@ export function ReadingPane({
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [snoozeOpen]);
+
+  useEffect(() => {
+    if (!blockMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        blockMenuRef.current &&
+        !blockMenuRef.current.contains(e.target as Node)
+      )
+        setBlockMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [blockMenuOpen]);
 
   if (!message) {
     return (
@@ -379,6 +403,62 @@ export function ReadingPane({
             onClick={() => onMarkSpam(message.id)}
           />
         )}
+        <ActionButton
+          icon={UserCheck}
+          label="Allow sender"
+          onClick={() => onAllowSender(message)}
+        />
+        <div className="relative flex items-center" ref={blockMenuRef}>
+          <ActionButton
+            icon={Ban}
+            label="Block"
+            onClick={() => setBlockMenuOpen((v) => !v)}
+          />
+          {blockMenuOpen && (
+            <div
+              className="absolute left-0 top-full z-10 mt-1 w-44 rounded-xl border py-1 shadow-lg"
+              style={{
+                background: "var(--bg-elevated)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <button
+                onClick={() => {
+                  setBlockMenuOpen(false);
+                  onBlockSender(message);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:opacity-80"
+                style={{ color: "var(--text)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--bg-hover)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                <Ban size={14} />
+                Block sender
+              </button>
+              <button
+                onClick={() => {
+                  setBlockMenuOpen(false);
+                  onBlockDomain(message);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:opacity-80"
+                style={{ color: "var(--text)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--bg-hover)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                <Globe size={14} />
+                Block domain
+              </button>
+            </div>
+          )}
+        </div>
         <ActionButton
           icon={Trash2}
           label="Delete"

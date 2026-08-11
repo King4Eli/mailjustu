@@ -8,8 +8,9 @@ import type { RowDataPacket } from "mysql2";
 type Ctx = { params: Promise<{ id: string }> };
 
 const FIELDS = new Set(["from", "to", "subject"]);
-const MATCH_TYPES = new Set(["contains", "equals"]);
-const ACTIONS = new Set(["move", "delete", "mark_read", "star"]);
+const MATCH_TYPES = new Set(["contains", "equals", "domain"]);
+const ACTIONS = new Set(["move", "delete", "mark_read", "star", "allow"]);
+const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   return withApiErrors(async () => {
@@ -23,7 +24,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     );
     if (!existing) return apiError(404, "Filter not found");
 
-    const name = body.name !== undefined ? String(body.name).trim() : existing.name;
+    const name =
+      body.name !== undefined ? String(body.name).trim() : existing.name;
     const field = body.field !== undefined ? body.field : existing.field;
     const matchType =
       body.matchType !== undefined ? body.matchType : existing.match_type;
@@ -35,15 +37,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         ? String(body.actionFolder).trim()
         : existing.action_folder;
     const enabled =
-      body.enabled !== undefined ? Boolean(body.enabled) : Boolean(existing.enabled);
+      body.enabled !== undefined
+        ? Boolean(body.enabled)
+        : Boolean(existing.enabled);
 
     if (!name) return apiError(400, "name is required");
-    if (!FIELDS.has(field)) return apiError(400, "field must be from/to/subject");
+    if (!FIELDS.has(field))
+      return apiError(400, "field must be from/to/subject");
     if (!MATCH_TYPES.has(matchType))
-      return apiError(400, "matchType must be contains/equals");
+      return apiError(400, "matchType must be contains/equals/domain");
     if (!value) return apiError(400, "value is required");
+    if (matchType === "domain" && !DOMAIN_PATTERN.test(value))
+      return apiError(400, "value must be a bare domain, e.g. spammer.com");
     if (!ACTIONS.has(action))
-      return apiError(400, "action must be move/delete/mark_read/star");
+      return apiError(400, "action must be move/delete/mark_read/star/allow");
     if (action === "move" && !actionFolder)
       return apiError(400, "actionFolder is required for a move action");
 
