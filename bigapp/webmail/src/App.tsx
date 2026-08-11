@@ -40,6 +40,18 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   };
 }
 
+// Used by the silent auto-refresh path to fold a freshly-fetched first page
+// into whatever's already on screen (including older pages pulled in by
+// "load more") -- fresh entries win for flag/content updates, anything
+// older that isn't in the fresh page is left alone rather than dropped.
+function mergeById(prev: EmailMessage[], fresh: EmailMessage[]): EmailMessage[] {
+  const freshIds = new Set(fresh.map((m) => m.id));
+  const keep = prev.filter((m) => !freshIds.has(m.id));
+  return [...fresh, ...keep].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+}
+
 function toFolderInfo(f: ApiFolder): FolderInfo {
   const name = f.specialUse === "\\Junk" ? "Spam" : f.name;
   return {
@@ -95,6 +107,27 @@ export default function App() {
   } | null>(null);
   const [listWidth, setListWidthState] = useState(() => getListWidth());
   const resizingRef = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  // Tracks any bulk/mass operation (bulk archive/delete/spam/move, or
+  // emptying a whole folder) that can take a while -- lets the UI disable
+  // controls and show a spinner instead of leaving the user unsure whether
+  // their click registered.
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Pagination/refresh bookkeeping that doesn't need to trigger renders on
+  // its own -- cursors for "load more", plus (for the merged Inbox+Sent
+  // thread view only) the raw per-folder lists threads are rebuilt from,
+  // since `messages` there is a derived, already-threaded view.
+  const paginationRef = useRef<{
+    mode: "single" | "inbox" | "none";
+    before?: number | null;
+    inboxBefore?: number | null;
+    sentBefore?: number | null;
+    inboxRaw?: EmailMessage[];
+    sentRaw?: EmailMessage[];
+  }>({ mode: "none" });
 
   async function loadFolders() {
     try {
@@ -133,8 +166,13 @@ export default function App() {
 
   async function loadMessages(folderId: string) {
     setLoading(true);
+    setHasMore(false);
     try {
       if (folderId === "STARRED") {
+        // Aggregated client-side view across every folder's first page --
+        // no stable per-folder cursor to page further on, so pagination is
+        // intentionally not offered here.
+        paginationRef.current = { mode: "none" };
         const realFolders = folders.filter((f) => f.id !== "STARRED");
         const results = await Promise.all(
           realFolders.map(async (f) => {
@@ -164,9 +202,20 @@ export default function App() {
           const sentMessages = sentRes.messages.map((m) =>
             toEmailMessage(m, sentFolder.id),
           );
+          paginationRef.current = {
+            mode: "inbox",
+            inboxBefore: inboxRes.nextBefore,
+            sentBefore: sentRes.nextBefore,
+            inboxRaw: inboxMessages,
+            sentRaw: sentMessages,
+          };
+          setHasMore(Boolean(inboxRes.nextBefore || sentRes.nextBefore));
           setMessages(buildInboxThreads(inboxMessages, sentMessages));
         } else {
-          const { messages: apiMessages } = await api.getMessages(folderId);
+          const { messages: apiMessages, nextBefore } =
+            await api.getMessages(folderId);
+          paginationRef.current = { mode: "single", before: nextBefore };
+          setHasMore(nextBefore != null);
           setMessages(
             apiMessages
               .map((m) => toEmailMessage(m))
@@ -181,6 +230,107 @@ export default function App() {
       push(err instanceof Error ? err.message : "Failed to load messages");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMoreMessages() {
+    const p = paginationRef.current;
+    if (loadingMore || !hasMore || p.mode === "none") return;
+    setLoadingMore(true);
+    try {
+      if (p.mode === "single") {
+        if (p.before == null) return;
+        const { messages: apiMessages, nextBefore } = await api.getMessages(
+          activeFolder,
+          p.before,
+        );
+        const older = apiMessages.map((m) => toEmailMessage(m));
+        setMessages((prev) =>
+          [...prev, ...older].sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+          ),
+        );
+        paginationRef.current = { ...p, before: nextBefore };
+        setHasMore(nextBefore != null);
+      } else if (p.mode === "inbox") {
+        const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
+        const sentFolder = folders.find((f) => f.icon === "\\Sent");
+        if (!inboxFolder || !sentFolder) return;
+        const [inboxRes, sentRes] = await Promise.all([
+          p.inboxBefore != null
+            ? api.getMessages(inboxFolder.id, p.inboxBefore)
+            : Promise.resolve({ messages: [], nextBefore: null }),
+          p.sentBefore != null
+            ? api.getMessages(sentFolder.id, p.sentBefore)
+            : Promise.resolve({ messages: [], nextBefore: null }),
+        ]);
+        const olderInbox = inboxRes.messages.map((m) =>
+          toEmailMessage(m, inboxFolder.id),
+        );
+        const olderSent = sentRes.messages.map((m) =>
+          toEmailMessage(m, sentFolder.id),
+        );
+        const allInbox = [...(p.inboxRaw || []), ...olderInbox];
+        const allSent = [...(p.sentRaw || []), ...olderSent];
+        paginationRef.current = {
+          ...p,
+          inboxBefore: inboxRes.nextBefore,
+          sentBefore: sentRes.nextBefore,
+          inboxRaw: allInbox,
+          sentRaw: allSent,
+        };
+        setHasMore(Boolean(inboxRes.nextBefore || sentRes.nextBefore));
+        setMessages(buildInboxThreads(allInbox, allSent));
+      }
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to load more messages");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // Polls the active folder in the background so new mail shows up without
+  // a page reload or router navigation. Merges into whatever's already
+  // rendered (see mergeById) instead of replacing it outright, so it
+  // doesn't clobber older pages the user has scrolled/loaded into view.
+  async function silentRefresh() {
+    if (!email || folders.length === 0 || loading || loadingMore) return;
+    if (activeFolder === "STARRED") return;
+    try {
+      const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
+      const sentFolder = folders.find((f) => f.icon === "\\Sent");
+      if (inboxFolder && sentFolder && activeFolder === inboxFolder.id) {
+        const [inboxRes, sentRes] = await Promise.all([
+          api.getMessages(inboxFolder.id),
+          api.getMessages(sentFolder.id),
+        ]);
+        const freshInbox = inboxRes.messages.map((m) =>
+          toEmailMessage(m, inboxFolder.id),
+        );
+        const freshSent = sentRes.messages.map((m) =>
+          toEmailMessage(m, sentFolder.id),
+        );
+        const p = paginationRef.current;
+        const mergedInbox = mergeById(p.inboxRaw || [], freshInbox);
+        const mergedSent = mergeById(p.sentRaw || [], freshSent);
+        paginationRef.current = {
+          ...p,
+          mode: "inbox",
+          inboxRaw: mergedInbox,
+          sentRaw: mergedSent,
+          inboxBefore: p.inboxBefore ?? inboxRes.nextBefore,
+          sentBefore: p.sentBefore ?? sentRes.nextBefore,
+        };
+        setMessages(buildInboxThreads(mergedInbox, mergedSent));
+      } else {
+        const { messages: apiMessages } = await api.getMessages(activeFolder);
+        const fresh = apiMessages.map((m) => toEmailMessage(m));
+        setMessages((prev) => mergeById(prev, fresh));
+      }
+      loadFolders();
+    } catch {
+      // Background refresh -- fail quietly rather than toasting on every
+      // missed poll (transient network hiccups shouldn't nag the user).
     }
   }
 
@@ -209,6 +359,17 @@ export default function App() {
 
   useEffect(() => {
     if (email && folders.length > 0) loadMessages(activeFolder);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, activeFolder, folders.length]);
+
+  // Auto-refresh: re-polls the active folder every 30s without a page
+  // reload or navigation (see silentRefresh above for the merge logic).
+  useEffect(() => {
+    if (!email || folders.length === 0) return;
+    const interval = setInterval(() => {
+      silentRefresh();
+    }, 30000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, activeFolder, folders.length]);
 
@@ -265,6 +426,9 @@ export default function App() {
   const currentMessageFolder = selectedMessage?.sourceFolder || activeFolder;
   const isSpamFolder =
     folders.find((f) => f.id === currentMessageFolder)?.icon === "\\Junk";
+  const activeFolderIcon = folders.find((f) => f.id === activeFolder)?.icon;
+  const canEmptyActiveFolder =
+    activeFolderIcon === "\\Trash" || activeFolderIcon === "\\Junk";
 
   async function handleSelect(message: EmailMessage) {
     const folder = message.sourceFolder || activeFolder;
@@ -394,6 +558,136 @@ export default function App() {
     setSelectedId(null);
     setSelectedMessage(null);
     loadFolders();
+  }
+
+  function toggleMessageSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === aliasFilteredMessages.length &&
+      aliasFilteredMessages.length > 0
+        ? new Set()
+        : new Set(aliasFilteredMessages.map((m) => m.id)),
+    );
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function removeMessagesFromList(ids: string[]) {
+    const idSet = new Set(ids);
+    setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
+    setSelectedIds(new Set());
+    if (selectedId && idSet.has(selectedId)) {
+      setSelectedId(null);
+      setSelectedMessage(null);
+    }
+    loadFolders();
+  }
+
+  async function bulkAction(
+    action: (id: string, folder: string) => Promise<unknown>,
+    failMessage: string,
+    successMessage: (n: number) => string,
+  ) {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(
+        ids.map((id) => {
+          const message = messages.find((m) => m.id === id);
+          const folder = message?.sourceFolder || activeFolder;
+          return action(id, folder);
+        }),
+      );
+      removeMessagesFromList(ids);
+      push(successMessage(ids.length), "success");
+    } catch (err) {
+      push(err instanceof Error ? err.message : failMessage);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function bulkArchive() {
+    return bulkAction(
+      (id, folder) => api.moveMessage(Number(id), folder, "Archive"),
+      "Failed to archive messages",
+      (n) => `Archived ${n} message${n === 1 ? "" : "s"}`,
+    );
+  }
+
+  function bulkDelete() {
+    return bulkAction(
+      (id, folder) => api.deleteMessage(Number(id), folder),
+      "Failed to delete messages",
+      (n) => `Deleted ${n} message${n === 1 ? "" : "s"}`,
+    );
+  }
+
+  function bulkMarkSpam() {
+    return bulkAction(
+      (id, folder) => api.markAsSpam(Number(id), folder),
+      "Failed to mark messages as spam",
+      (n) => `Marked ${n} message${n === 1 ? "" : "s"} as spam`,
+    );
+  }
+
+  function bulkMarkNotSpam() {
+    return bulkAction(
+      (id, folder) => api.markAsNotSpam(Number(id), folder),
+      "Failed to mark messages as not spam",
+      (n) => `Marked ${n} message${n === 1 ? "" : "s"} as not spam`,
+    );
+  }
+
+  function bulkMoveTo(target: string) {
+    return bulkAction(
+      (id, folder) => api.moveMessage(Number(id), folder, target),
+      "Failed to move messages",
+      (n) => `Moved ${n} message${n === 1 ? "" : "s"}`,
+    );
+  }
+
+  async function emptyCurrentFolder() {
+    if (
+      !window.confirm(
+        `Permanently delete all messages in "${folderLabel}"? This can't be undone.`,
+      )
+    )
+      return;
+    setBulkBusy(true);
+    try {
+      await api.emptyFolder(activeFolder);
+      setMessages([]);
+      setSelectedIds(new Set());
+      setSelectedId(null);
+      setSelectedMessage(null);
+      loadFolders();
+      push(`${folderLabel} emptied`, "success");
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to empty folder");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function refreshAll() {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadFolders(), loadMessages(activeFolder)]);
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function archiveMessage(id: string) {
@@ -605,6 +899,7 @@ export default function App() {
     setMessages([]);
     setSelectedId(null);
     setSelectedMessage(null);
+    setSelectedIds(new Set());
     setAliases([]);
     setActiveAlias(null);
   }
@@ -653,6 +948,7 @@ export default function App() {
           setActiveFolder(id);
           setSelectedId(null);
           setSelectedMessage(null);
+          setSelectedIds(new Set());
           setFilter("all");
         }}
         onCompose={() => setComposeDraft({ to: "", subject: "", body: "" })}
@@ -667,6 +963,8 @@ export default function App() {
         onSelectAlias={(source) =>
           setActiveAlias((prev) => (prev === source ? null : source))
         }
+        onRefresh={refreshAll}
+        refreshing={refreshing || loading}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -700,6 +998,22 @@ export default function App() {
               width={listWidth}
               activeAliasFilter={activeAlias}
               onClearAliasFilter={() => setActiveAlias(null)}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleMessageSelect}
+              onToggleSelectAll={toggleSelectAll}
+              onClearSelection={clearSelection}
+              folders={folders}
+              isSpamFolder={isSpamFolder}
+              onBulkArchive={bulkArchive}
+              onBulkDelete={bulkDelete}
+              onBulkMarkSpam={bulkMarkSpam}
+              onBulkMarkNotSpam={bulkMarkNotSpam}
+              onBulkMoveTo={bulkMoveTo}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+              onLoadMore={loadMoreMessages}
+              onEmptyFolder={canEmptyActiveFolder ? emptyCurrentFolder : undefined}
+              busy={bulkBusy}
             />
           </div>
 

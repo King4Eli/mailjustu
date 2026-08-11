@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { simpleParser } from "mailparser";
-import { withImap } from "@/lib/api/imap";
+import { withImap, resolveFolder } from "@/lib/api/imap";
 import { requireSession } from "@/lib/api/auth";
-import { withApiErrors } from "@/lib/api/handler";
+import { apiError, withApiErrors } from "@/lib/api/handler";
 import { computeThreadId, normalizeReferences } from "@/lib/api/threading";
 
 const LIST_LIMIT = 30;
@@ -16,12 +16,19 @@ export async function GET(req: NextRequest) {
   return withApiErrors(async () => {
     const { email, password } = requireSession(req);
     const folder = req.nextUrl.searchParams.get("folder") || "INBOX";
-    const messages = await withImap(email, password, async (client) => {
+    // Older-than cursor: sequence number of the oldest message already
+    // loaded by the client. Omitted on the first page, which fetches the
+    // newest LIST_LIMIT messages instead.
+    const beforeParam = req.nextUrl.searchParams.get("before");
+    const before = beforeParam ? Number(beforeParam) : null;
+    const result = await withImap(email, password, async (client) => {
       const mailbox = await client.mailboxOpen(folder);
-      if (mailbox.exists === 0) return [];
-      const from = Math.max(1, mailbox.exists - LIST_LIMIT + 1);
+      const to = before != null ? before - 1 : mailbox.exists;
+      if (mailbox.exists === 0 || to < 1) return { messages: [], nextBefore: null };
+      const from = Math.max(1, to - LIST_LIMIT + 1);
+      const nextBefore = from > 1 ? from : null;
       const out = [];
-      for await (const msg of client.fetch(`${from}:*`, {
+      for await (const msg of client.fetch(`${from}:${to}`, {
         envelope: true,
         flags: true,
         uid: true,
@@ -68,8 +75,38 @@ export async function GET(req: NextRequest) {
             .map(({ index, name, size }) => ({ index, name, size })),
         });
       }
-      return out.reverse();
+      return { messages: out.reverse(), nextBefore };
     });
-    return Response.json({ folder, messages });
+    return Response.json({ folder, ...result });
+  });
+}
+
+// Permanently deletes every message in a folder -- only allowed for
+// Trash/Spam, where "empty" means gone for good rather than moved.
+export async function DELETE(req: NextRequest) {
+  return withApiErrors(async () => {
+    const { email, password } = requireSession(req);
+    const folder = req.nextUrl.searchParams.get("folder");
+    if (!folder) return apiError(400, "folder is required");
+    try {
+      await withImap(email, password, async (client) => {
+        const trash = await resolveFolder(client, email, "Trash");
+        const junk = await resolveFolder(client, email, "Junk");
+        if (folder !== trash && folder !== junk) {
+          throw Object.assign(
+            new Error("Only Trash or Spam can be emptied"),
+            { invalidFolder: true },
+          );
+        }
+        await client.mailboxOpen(folder);
+        await client.messageDelete({ all: true });
+      });
+      return Response.json({ ok: true });
+    } catch (err) {
+      return apiError(
+        (err as { invalidFolder?: boolean }).invalidFolder ? 400 : 500,
+        (err as Error).message,
+      );
+    }
   });
 }

@@ -142,8 +142,18 @@ export interface ApiMessage {
 
 export function getMessages(
   folder: string,
-): Promise<{ folder: string; messages: ApiMessage[] }> {
-  return apiFetch(`/mail/messages?folder=${encodeURIComponent(folder)}`);
+  before?: number | null,
+): Promise<{ folder: string; messages: ApiMessage[]; nextBefore: number | null }> {
+  const beforeParam = before != null ? `&before=${before}` : "";
+  return apiFetch(
+    `/mail/messages?folder=${encodeURIComponent(folder)}${beforeParam}`,
+  );
+}
+
+export function emptyFolder(folder: string) {
+  return apiFetch(`/mail/messages?folder=${encodeURIComponent(folder)}`, {
+    method: "DELETE",
+  });
 }
 
 export function getMessage(
