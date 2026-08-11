@@ -44,9 +44,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// Creating/deleting a domain is infra-level -- reserved for super admins.
-// A domain admin already has "their" domain; there's nothing for them to
-// create, and deleting cascades away every mailbox on it.
+// Infra-level -- reserved for super admins.
 export async function POST(req: NextRequest) {
   return withApiErrors(async () => {
     requireSuperAdmin(req);

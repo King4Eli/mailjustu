@@ -8,9 +8,7 @@ import {
 } from "@/lib/api/attachments";
 import type { RowDataPacket } from "mysql2";
 
-// List this mailbox's still-pending scheduled/undo-window sends -- used
-// for the compose "Undo" toast (cancel by id) and could back a fuller
-// Outbox view later.
+// This mailbox's still-pending scheduled/undo-window sends.
 export async function GET(req: NextRequest) {
   return withApiErrors(async () => {
     const { email } = requireSession(req);
@@ -25,10 +23,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// Same shape as POST /api/mail/send, plus sendAt -- queues instead of
-// relaying immediately. lib/api/scheduler.ts's poller picks it up once
-// send_at passes (see there for why no mailbox password needs to be
-// stored to make that work).
+// Same shape as POST /api/mail/send, plus sendAt -- queues instead of sending.
 export async function POST(req: NextRequest) {
   return withApiErrors(async () => {
     const { email } = requireSession(req);

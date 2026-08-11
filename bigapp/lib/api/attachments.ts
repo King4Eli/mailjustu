@@ -1,7 +1,3 @@
-// multer's own errors (too many files, a file too large) used to get
-// thrown from inside its middleware, before the route handler ever ran --
-// left alone, that turned into an opaque "Internal server error" with no
-// indication of what actually went wrong. Surface them properly instead.
 export const MAX_ATTACHMENTS_PER_MESSAGE =
   Number(process.env.MAX_ATTACHMENTS_PER_MESSAGE) || 10;
 export const MAX_ATTACHMENT_SIZE_MB =

@@ -127,8 +127,7 @@ export function Login({ onLogin }: LoginProps) {
             className="mt-2 text-center text-xs"
             style={{ color: "var(--text-muted)" }}
           >
-            Ask your mail admin to reset it from the admin dashboard&apos;s
-            Mailboxes tab.
+            Ask your admin to reset it in the dashboard.
           </p>
         )}
       </form>

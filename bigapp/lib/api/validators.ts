@@ -1,6 +1,4 @@
-// Small, dependency-free validation helpers shared by the admin/mail
-// routes -- pulled out so they're unit-testable without a live DB/IMAP
-// connection (see ../../api-test/).
+// Dependency-free so these are unit-testable without a live DB/IMAP connection.
 
 export function normalizeMailboxEmail(
   email: string | undefined | null,

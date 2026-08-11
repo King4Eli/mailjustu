@@ -27,12 +27,8 @@ CREATE TABLE IF NOT EXISTS virtual_aliases (
   FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE
 );
 
--- Queued compose-later/scheduled-send messages. Sent via Postfix's
--- mynetworks-trusted relay (see app/api/mail/send/route.ts), so no
--- mailbox password needs to be stored here -- the background poller
--- (lib/api/scheduler.ts) only needs this row, not the account's
--- credentials. A best-effort Sent-folder copy is attempted if the
--- composing session is still live when it fires; skipped otherwise.
+-- Queued scheduled/undo-window sends -- sent by lib/api/scheduler.ts via
+-- the trusted relay, no stored password needed.
 CREATE TABLE IF NOT EXISTS scheduled_sends (
   id INT AUTO_INCREMENT PRIMARY KEY,
   mailbox_email VARCHAR(255) NOT NULL,
@@ -63,12 +59,7 @@ CREATE TABLE IF NOT EXISTS scheduled_send_attachments (
   FOREIGN KEY (scheduled_send_id) REFERENCES scheduled_sends(id) ON DELETE CASCADE
 );
 
--- "Snooze" is a hide-until marker, not a real IMAP move -- so bringing a
--- message back doesn't need the account's IMAP credentials at wake time,
--- only at snooze time (an authenticated request, like everything else in
--- app/api/mail/*). Matched back to the live message by (mailbox, folder,
--- uid); if the message was itself moved/deleted in the meantime the row
--- just goes stale and is pruned, same as a dangling bookmark.
+-- A hide-until marker, not an IMAP move -- no credentials needed at wake time.
 CREATE TABLE IF NOT EXISTS snoozed_messages (
   id INT AUTO_INCREMENT PRIMARY KEY,
   mailbox_email VARCHAR(255) NOT NULL,
@@ -80,28 +71,17 @@ CREATE TABLE IF NOT EXISTS snoozed_messages (
   INDEX idx_snoozed_wake_at (wake_at)
 );
 
--- Rule definitions backing the real server-side Sieve script generated in
--- lib/api/sieve.ts and installed into Dovecot over ManageSieve
--- (RFC 5804) whenever a mailbox's rules change. Dovecot runs the script at
--- LMTP delivery time from then on -- these rows exist so the UI has
--- somewhere to list/edit/reorder rules; the Sieve script itself is the
--- actual filtering logic, regenerated in full from these rows on every
--- change rather than parsed back out of Sieve.
+-- Rules compiled into a Sieve script (lib/api/sieve.ts) and installed via
+-- ManageSieve -- regenerated in full from these rows on every change.
 CREATE TABLE IF NOT EXISTS mail_filters (
   id INT AUTO_INCREMENT PRIMARY KEY,
   mailbox_email VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   field ENUM('from', 'to', 'subject') NOT NULL,
-  -- 'domain' stores a bare domain in `value` (e.g. "spammer.com") and
-  -- compiles to a Sieve :matches "*@value" wildcard test, not a plain
-  -- substring -- see lib/api/sieve.ts. Whole-domain block/allow entries
-  -- from the Allow/Block lists panel use this.
+  -- 'domain' matches "*@value" (whole-domain), not a plain substring.
   match_type ENUM('contains', 'equals', 'domain') NOT NULL DEFAULT 'contains',
   value VARCHAR(255) NOT NULL,
-  -- 'allow' is the block-list's counterpart: an explicit keep+stop, always
-  -- sorted to run before every other action when the script is generated
-  -- (see lib/api/sieve.ts) so an allowed sender wins over a block rule
-  -- that would otherwise also match it, regardless of row position.
+  -- 'allow' always runs before other actions, regardless of position.
   action ENUM('move', 'delete', 'mark_read', 'star', 'allow') NOT NULL,
   action_folder VARCHAR(255) NULL,
   position INT NOT NULL DEFAULT 0,

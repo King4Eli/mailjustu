@@ -50,10 +50,7 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   };
 }
 
-// Used by the silent auto-refresh path to fold a freshly-fetched first page
-// into whatever's already on screen (including older pages pulled in by
-// "load more") -- fresh entries win for flag/content updates, anything
-// older that isn't in the fresh page is left alone rather than dropped.
+// Folds a fresh page into what's on screen -- fresh entries win, older stay.
 function mergeById(
   prev: EmailMessage[],
   fresh: EmailMessage[],
@@ -76,10 +73,7 @@ function toFolderInfo(f: ApiFolder): FolderInfo {
   };
 }
 
-// ComposeModal renders the quoted previous message as its own read-only
-// block, separate from `body` (see ComposeDraft) -- but IMAP/SMTP only
-// carry one plain-text body, so fold them back into one string wherever a
-// draft is actually sent or saved.
+// Folds the quoted block back into `body` for IMAP/SMTP.
 function combinedBody(draft: ComposeDraft): string {
   return draft.quoteBody
     ? `${draft.body.trim()}\n\n${draft.quoteHeading ? `${draft.quoteHeading}\n` : ""}${draft.quoteBody}`
@@ -90,11 +84,7 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// HTML counterpart to combinedBody -- the compose editor already produces
-// real HTML for whatever the user typed (see ComposeModal's contentEditable
-// body), so this just needs to fold the plain-text quoted block in as a
-// <blockquote>. Returns undefined for a plain, unformatted, non-reply
-// message so a trivial send doesn't grow a redundant HTML alternative part.
+// HTML counterpart to combinedBody. Undefined if there's nothing to add.
 function combinedHtml(draft: ComposeDraft): string | undefined {
   const hasRichContent = Boolean(draft.html?.trim());
   if (!hasRichContent && !draft.quoteBody) return undefined;
@@ -109,9 +99,7 @@ function combinedHtml(draft: ComposeDraft): string | undefined {
   return `${bodyHtml}${quoteHtml}`;
 }
 
-// Appended to a fresh draft's body (new compose or reply/forward, not a
-// reopened saved draft) if the user has one configured -- see
-// SignatureModal / settings.ts.
+// Appended to a fresh draft's body, if configured.
 function withSignature(body: string): string {
   const sig = getSignature();
   if (!sig) return body;
@@ -133,9 +121,7 @@ export default function App() {
     null,
   );
   const [query, setQuery] = useState("");
-  // True while `messages` holds server-side search results rather than the
-  // active folder's normal contents -- disables pagination/auto-refresh
-  // (see loadMoreMessages/silentRefresh) so they don't clobber a search.
+  // True while `messages` holds search results, not the folder's contents.
   const [searching, setSearching] = useState(false);
   const [filter, setFilter] = useState<MessageFilter>("all");
   const [loading, setLoading] = useState(false);
@@ -154,11 +140,7 @@ export default function App() {
   const [blockListOpen, setBlockListOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [activeAlias, setActiveAlias] = useState<string | null>(null);
-  // Accumulates (email -> display name) across every folder/message this
-  // session has loaded, for compose's To/Cc autocomplete -- not a real
-  // address book, just "people you've already exchanged mail with lately".
-  // A ref (not state) since it's read fresh at render time and mutating it
-  // shouldn't itself trigger a re-render.
+  // Accumulates email -> name across the session for compose autocomplete.
   const contactsRef = useRef<Map<string, string>>(new Map());
   const [usage, setUsage] = useState<{
     usedBytes: number | null;
@@ -166,24 +148,15 @@ export default function App() {
   } | null>(null);
   const [listWidth, setListWidthState] = useState(() => getListWidth());
   const resizingRef = useRef(false);
-  // null until the first folders load -- distinguishes "haven't checked
-  // yet" from "checked and it's zero" so the notification effect below
-  // doesn't fire for a mailbox's entire pre-existing unread backlog on
-  // first load, only for genuine increases after that.
+  // null = haven't checked yet, so first load doesn't notify for the backlog.
   const prevInboxUnseenRef = useRef<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  // Tracks any bulk/mass operation (bulk archive/delete/spam/move, or
-  // emptying a whole folder) that can take a while -- lets the UI disable
-  // controls and show a spinner instead of leaving the user unsure whether
-  // their click registered.
+  // True during any bulk/mass operation -- disables controls, shows a spinner.
   const [bulkBusy, setBulkBusy] = useState(false);
-  // Pagination/refresh bookkeeping that doesn't need to trigger renders on
-  // its own -- cursors for "load more", plus (for the merged Inbox+Sent
-  // thread view only) the raw per-folder lists threads are rebuilt from,
-  // since `messages` there is a derived, already-threaded view.
+  // Pagination cursors, plus raw per-folder lists for the merged Inbox+Sent view.
   const paginationRef = useRef<{
     mode: "single" | "inbox" | "none";
     before?: number | null;
@@ -250,9 +223,7 @@ export default function App() {
     setHasMore(false);
     try {
       if (folderId === "STARRED") {
-        // Aggregated client-side view across every folder's first page --
-        // no stable per-folder cursor to page further on, so pagination is
-        // intentionally not offered here.
+        // Aggregated across every folder's first page -- no pagination here.
         paginationRef.current = { mode: "none" };
         const realFolders = folders.filter(
           (f) => f.id !== "STARRED" && f.id !== "SNOOZED",
@@ -272,15 +243,10 @@ export default function App() {
           );
         setMessages(merged);
       } else if (folderId === "SNOOZED") {
-        // Server-aggregated (see api.getSnoozedMessages/app/api/mail/snoozed)
-        // -- unlike STARRED this can't be built from each folder's already-
-        // fetched first page, since a snoozed message is deliberately
-        // excluded from its folder's normal listing while asleep.
+        // Server-aggregated -- excluded from each folder's own listing.
         paginationRef.current = { mode: "none" };
         const { messages: apiMessages } = await api.getSnoozedMessages();
-        // Already sorted soonest-to-wake-first by the server -- keep that
-        // order rather than the usual newest-first, since "when does this
-        // come back" is the relevant ordering here.
+        // Server sorts soonest-to-wake-first -- keep that order.
         setMessages(apiMessages.map((m) => toEmailMessage(m, m.sourceFolder)));
       } else {
         const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
@@ -383,10 +349,7 @@ export default function App() {
     }
   }
 
-  // Polls the active folder in the background so new mail shows up without
-  // a page reload or router navigation. Merges into whatever's already
-  // rendered (see mergeById) instead of replacing it outright, so it
-  // doesn't clobber older pages the user has scrolled/loaded into view.
+  // Background poll -- merges in rather than replacing, no reload/navigation.
   async function silentRefresh() {
     if (!email || folders.length === 0 || loading || loadingMore || searching)
       return;
@@ -424,8 +387,7 @@ export default function App() {
       }
       loadFolders();
     } catch {
-      // Background refresh -- fail quietly rather than toasting on every
-      // missed poll (transient network hiccups shouldn't nag the user).
+      // fail quietly -- don't toast on every missed poll
     }
   }
 
@@ -443,10 +405,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
-  // Favicon unread badge + desktop notification, driven by the Inbox's
-  // unseen count (refreshed by every loadFolders() call, including the
-  // auto-refresh poller) rather than by diffing message lists -- see
-  // notifications.ts for why that's simpler and folder-independent.
+  // Favicon badge + notification, driven by Inbox unseen count.
   useEffect(() => {
     const inboxUnseen = folders.find((f) => f.icon === "\\Inbox")?.unseen ?? 0;
     updateFaviconBadge(inboxUnseen);
@@ -459,12 +418,7 @@ export default function App() {
     prevInboxUnseenRef.current = inboxUnseen;
   }, [folders]);
 
-  // Registered once -- api.ts calls this the moment any request comes back
-  // 401, so an expired session drops straight to the Login screen instead
-  // of leaving the app rendered with stale data and a toast per failed
-  // request. Only resets local React state (see handleLogout for the
-  // explicit sign-out path, which also calls the server) -- the token's
-  // already invalid server-side, so there's nothing left to tell it.
+  // Drops to the Login screen the moment any request comes back 401.
   useEffect(() => {
     api.onSessionExpired(resetLocalSession);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -476,9 +430,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, activeFolder, folders.length]);
 
-  // Folds this batch of messages' senders/recipients into the running
-  // contacts list (see contactsRef above) -- fires on every folder
-  // load/search/refresh, so it only ever grows across the session.
+  // Folds senders/recipients into the running contacts list.
   useEffect(() => {
     for (const m of messages) {
       if (m.from?.email) {
@@ -493,8 +445,7 @@ export default function App() {
     }
   }, [messages]);
 
-  // Auto-refresh: re-polls the active folder every 30s without a page
-  // reload or navigation (see silentRefresh above for the merge logic).
+  // Re-polls the active folder every 30s without a reload/navigation.
   useEffect(() => {
     if (!email || folders.length === 0) return;
     const interval = setInterval(() => {
@@ -504,9 +455,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, activeFolder, folders.length]);
 
-  // Debounced server-side search (real IMAP SEARCH over the whole folder,
-  // not just whatever's already loaded -- see api.searchMessages). Clearing
-  // the box drops back to the normal paginated folder view.
+  // Debounced server-side search. Clearing drops back to the folder view.
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
@@ -554,9 +503,7 @@ export default function App() {
     );
   }
 
-  // While searching, `messages` already holds the server's search results
-  // (see the debounced search effect above) -- no further client-side
-  // text filtering needed on top of it.
+  // While searching, `messages` already holds the server's search results.
   const folderMessages = messages.filter((m) => {
     switch (filter) {
       case "unread":
@@ -572,9 +519,7 @@ export default function App() {
     }
   });
 
-  // Alias filter is a second, independent axis on top of the folder/pill
-  // filters above -- stays active across folder switches so "only mail to
-  // sales@..." can be checked in Inbox, then Spam, without re-selecting it.
+  // Independent of the folder/pill filters -- stays active across folder switches.
   const aliasFilteredMessages = activeAlias
     ? folderMessages.filter((m) => {
         const addr = activeAlias.toLowerCase();
@@ -912,9 +857,7 @@ export default function App() {
     }
   }
 
-  // Attachments can be downloaded from any message inside an expanded
-  // thread, not just the representative (latest) one shown in the list --
-  // look inside its threadMessages too before falling back to activeFolder.
+  // Attachments can come from any message in an expanded thread, not just the latest.
   function findAnyMessage(id: string): EmailMessage | undefined {
     if (selectedMessage?.id === id) return selectedMessage;
     return (
@@ -1017,16 +960,8 @@ export default function App() {
     }
   }
 
-  // One-click "Block sender" -- installs a real server-side block rule
-  // (future mail from this exact address is discarded at delivery, see
-  // lib/api/sieve.ts) and also gets the already-arrived message out of
-  // the inbox, matching how Gmail/Outlook's "Block sender" behaves.
-  // Shared by the three quick-action toolbar buttons below (Block sender,
-  // Block domain, Allow sender) -- installs one "from" rule and shows an
-  // Undo toast that removes it again by id. `andTrash` additionally moves
-  // the currently-open message to Trash, which only makes sense for block
-  // actions (Gmail/Outlook-style "block sender" also clears the one
-  // that's already in front of you); allow doesn't touch it.
+  // Shared by Block sender/domain/Allow sender -- installs one "from" rule
+  // and shows an Undo toast. `andTrash` only makes sense for block actions.
   async function quickSenderFilter(opts: {
     value: string;
     matchType: "equals" | "domain";
@@ -1096,15 +1031,16 @@ export default function App() {
     });
   }
 
-  // Allow/Block lists modal -- same underlying mail_filters mechanism as
-  // blockSender above and the general Filters modal, just pre-configured
-  // for the common "exact sender address" case.
+  // Same mail_filters mechanism as blockSender, pre-configured for the modal.
   async function addBlockedSender(
     value: string,
     matchType: "equals" | "domain" = "equals",
   ) {
     await api.createFilter({
-      name: matchType === "domain" ? `Blocked domain: ${value}` : `Blocked: ${value}`,
+      name:
+        matchType === "domain"
+          ? `Blocked domain: ${value}`
+          : `Blocked: ${value}`,
       field: "from",
       matchType,
       value,
@@ -1118,7 +1054,10 @@ export default function App() {
     matchType: "equals" | "domain" = "equals",
   ) {
     await api.createFilter({
-      name: matchType === "domain" ? `Allowed domain: ${value}` : `Allowed: ${value}`,
+      name:
+        matchType === "domain"
+          ? `Allowed domain: ${value}`
+          : `Allowed: ${value}`,
       field: "from",
       matchType,
       value,
@@ -1127,11 +1066,7 @@ export default function App() {
     loadFilters();
   }
 
-  // A message may have arrived at an alias rather than the primary
-  // address (e.g. sales@... forwarding into this mailbox) -- default the
-  // reply's From to whichever of the user's own addresses it was actually
-  // sent to, so the reply goes out under the identity the sender used,
-  // not always the primary one. Falls back to the primary address.
+  // Reply from whichever alias the message actually arrived at, if any.
   function pickReplyFrom(message: EmailMessage): string | undefined {
     const recipients = [...message.to, ...(message.cc || [])].map((a) =>
       a.toLowerCase(),
@@ -1147,10 +1082,7 @@ export default function App() {
     message: EmailMessage,
     mode: "reply" | "replyAll" | "forward",
   ) {
-    // Quoted content is kept separate from `body` (see ComposeDraft) so it
-    // renders as its own read-only block instead of sharing the textarea
-    // with what's actually being typed -- combined back into one string
-    // at send time in handleSend.
+    // Quoted content stays separate from `body` until send time.
     const isForward = mode === "forward";
     const quoteHeading = isForward
       ? `---------- Forwarded message ----------\nFrom: ${message.from.name} <${message.from.email}>\nDate: ${new Date(message.date).toLocaleString()}\nSubject: ${message.subject}\nTo: ${message.to.join(", ")}`
@@ -1159,9 +1091,7 @@ export default function App() {
       .split("\n")
       .map((line) => `> ${line}`)
       .join("\n");
-    // In-Reply-To/References keep the reply threaded to this conversation
-    // (both in this webmail's own Inbox+Sent merge and in any other mail
-    // client that reads these headers) instead of starting a new one.
+    // Keeps the reply threaded instead of starting a new conversation.
     setComposeDraft({
       to: isForward ? "" : message.from.email,
       cc: mode === "replyAll" && message.cc ? message.cc.join(", ") : undefined,
@@ -1185,14 +1115,8 @@ export default function App() {
     });
   }
 
-  // Undo Send is implemented as a very-short scheduled send (see
-  // api.scheduleSend / app/api/mail/scheduled-sends) rather than a plain
-  // client-side setTimeout, deliberately -- a pure client-side delay would
-  // silently lose the message if the tab closes during the undo window.
-  // Going through the same DB-backed queue "Send later" uses means the
-  // undo window survives a closed tab exactly like any other scheduled
-  // send; the tradeoff is up to one poll interval (see
-  // SCHEDULED_SEND_POLL_SECONDS) of extra latency after the undo window.
+  // Undo Send is a very-short scheduled send, not a client-side setTimeout --
+  // it survives a closed tab, at the cost of one poll interval of latency.
   const UNDO_SEND_DELAY_SECONDS = 10;
 
   function draftToSendOpts(draft: ComposeDraft): api.SendMailOpts {
@@ -1232,9 +1156,7 @@ export default function App() {
           );
         },
       });
-      // The actual send (and best-effort Sent-folder append) happens
-      // server-side once send_at passes, not synchronously here -- refresh
-      // afterwards so Sent/thread views pick it up.
+      // Actual send happens server-side once send_at passes -- refresh after.
       window.setTimeout(
         () => {
           loadFolders();
@@ -1271,9 +1193,7 @@ export default function App() {
     setActiveAlias(null);
     setQuery("");
     setSearching(false);
-    // Re-arm the "skip the first load's backlog" guard (see the effect
-    // that calls notifyNewMail) so logging back in doesn't immediately
-    // notify for whatever's already unread.
+    // Re-arm the backlog guard so logging back in doesn't notify immediately.
     prevInboxUnseenRef.current = null;
   }
 

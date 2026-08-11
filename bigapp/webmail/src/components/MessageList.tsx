@@ -22,12 +22,9 @@ interface MessageListProps {
   folderLabel: string;
   filter: MessageFilter;
   onFilterChange: (filter: MessageFilter) => void;
-  // User-resizable (see App.tsx's drag handle) -- only applied at the md+
-  // breakpoint; below that this column is always full-width.
+  // User-resizable; only applied at the md+ breakpoint.
   width: number;
-  // Set when a sidebar alias is selected -- narrows `messages` (already
-  // filtered by the caller) down to mail addressed to that alias, across
-  // whichever folder is active.
+  // Set when a sidebar alias is selected -- narrows `messages` further.
   activeAliasFilter: string | null;
   onClearAliasFilter: () => void;
   selectedIds: Set<string>;
@@ -45,13 +42,9 @@ interface MessageListProps {
   loadingMore: boolean;
   onLoadMore: () => void;
   onEmptyFolder?: () => void;
-  // Set while a bulk action or "empty folder" is in flight -- disables the
-  // relevant controls and swaps in a spinner so a slow mass-delete doesn't
-  // look like a dropped click.
+  // True during a bulk action/empty-folder -- disables controls, shows a spinner.
   busy: boolean;
-  // Identifies which folder `messages` belongs to -- used only to re-arm
-  // the load-more trigger on folder switch (see the armedRef comment
-  // below).
+  // Used to re-arm the load-more trigger on folder switch (see armedRef).
   folderId: string;
 }
 
@@ -140,16 +133,8 @@ export function MessageList({
   const allSelected =
     messages.length > 0 && selectedIds.size === messages.length;
 
-  // "Armed" gates onLoadMore to firing at most once per approach to the
-  // bottom -- without it, a scroll event landing while a page is still in
-  // flight (or a page that doesn't add enough height to clear the
-  // threshold) re-fires immediately on the next scroll tick, chaining
-  // fetches with no further input from the user. Disarmed the instant a
-  // load fires; only re-armed once the user scrolls back out of the
-  // threshold zone, i.e. a fresh approach to the bottom. A ref, not state,
-  // because it must take effect synchronously within the same scroll
-  // event that disarms it -- state's next-render delay is exactly the gap
-  // the bug lived in.
+  // Gates onLoadMore to one fire per approach to the bottom -- a ref (not
+  // state) so it takes effect synchronously within the same scroll event.
   const armedRef = useRef(true);
 
   useEffect(() => {

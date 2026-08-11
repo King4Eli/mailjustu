@@ -15,9 +15,7 @@ interface SnoozedRow extends RowDataPacket {
   wake_at: string;
 }
 
-// Backs the client-only "Snoozed" pseudo-folder (same pattern as
-// STARRED in App.tsx) -- groups this mailbox's still-sleeping snoozed
-// rows by folder, opens each folder once, and fetches just those UIDs.
+// Backs the "Snoozed" pseudo-folder -- groups rows by folder, fetches by UID.
 export async function GET(req: NextRequest) {
   return withApiErrors(async () => {
     const { email, password } = requireSession(req);

@@ -41,8 +41,7 @@ export function SignatureModal({
         </div>
 
         <p className="mb-3 text-xs" style={{ color: "var(--text-faint)" }}>
-          Appended to new messages and replies -- stored on this device only,
-          not synced across browsers.
+          Added to new messages and replies. Stored on this device only.
         </p>
 
         <textarea

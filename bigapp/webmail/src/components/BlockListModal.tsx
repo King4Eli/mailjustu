@@ -20,9 +20,7 @@ function isSenderRule(f: MailFilter, action: MailFilter["action"]) {
   );
 }
 
-// Accepts a pasted full address ("user@spammer.com") when adding a
-// domain entry and just keeps the part after "@", so pasting an email by
-// habit still does the right thing instead of erroring.
+// Also accepts a pasted full address, keeping just the part after "@".
 function normalizeDomainInput(raw: string): string {
   const trimmed = raw.trim().replace(/^@+/, "");
   const at = trimmed.indexOf("@");
@@ -196,10 +194,7 @@ export function BlockListModal({
         </div>
 
         <p className="mb-4 text-xs" style={{ color: "var(--text-faint)" }}>
-          Blocked senders/domains are silently discarded at delivery -- they
-          never reach any folder. Allowed senders/domains always get
-          through, even if a block rule below would otherwise also match
-          them.
+          Blocked mail is discarded. Allowed senders always get through.
         </p>
 
         <div className="flex flex-col gap-5">

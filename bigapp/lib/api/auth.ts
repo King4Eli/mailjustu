@@ -13,11 +13,7 @@ export interface AdminScope {
   domain: string | null;
 }
 
-// A plain module-level Map, same as the original Express middleware --
-// safe here because webFront runs `next start`/standalone as a single,
-// long-running Node process (no built-in clustering), same execution
-// model Express ran under. NOTE: next dev's hot-module-reload can reset
-// this on every edit; irrelevant in production (next build && next start).
+// Safe as a plain Map -- single long-running Node process, no clustering.
 const sessions = new Map<string, Session>();
 const SESSION_TTL_MS =
   (Number(process.env.SESSION_TTL_MINUTES) || 120) * 60 * 1000;
@@ -30,10 +26,7 @@ export function isSuperAdminEmail(email: string): boolean {
   return list.includes(email.toLowerCase());
 }
 
-// role: 'super' (SUPER_ADMIN_EMAILS, sees/manages everything, including
-// Services/health/stats) | 'domain' (virtual_users.is_admin, scoped to
-// their own domain, never sees Services/health/stats) | 'user' (webmail
-// only, no admin routes).
+// role: 'super' (sees everything) | 'domain' (scoped) | 'user' (webmail only).
 export function createSession(
   email: string,
   password: string,

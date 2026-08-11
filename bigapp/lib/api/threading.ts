@@ -1,6 +1,4 @@
-// Groups messages into conversations the same way real mail clients do:
-// walk the References chain back to its root, falling back to In-Reply-To,
-// falling back to the message's own id if it never replied to anything.
+// Root of the References chain, falling back to In-Reply-To, then id.
 export function computeThreadId(headers: {
   messageId?: string;
   inReplyTo?: string;

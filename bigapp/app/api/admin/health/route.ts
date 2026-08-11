@@ -3,9 +3,7 @@ import net from "node:net";
 import { requireSuperAdmin } from "@/lib/api/auth";
 import { withApiErrors } from "@/lib/api/handler";
 
-// Without this, Next.js would try to statically prerender this route
-// (confirmed elsewhere in this project that it silently bakes in
-// build-time values when that happens) -- this route must run per-request.
+// Must run per-request, not statically prerendered.
 export const dynamic = "force-dynamic";
 
 function pingPort(

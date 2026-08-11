@@ -27,9 +27,7 @@ export function setComposeStyle(style: ComposeStyle) {
   localStorage.setItem(COMPOSE_STYLE_KEY, style);
 }
 
-// Stored client-side (no per-account server profile exists) as plain
-// text, appended to new compose drafts. Not applied to replies/forwards
-// or reopened drafts -- see ComposeModal.
+// Stored client-side; appended to new drafts and replies, not reopened ones.
 export function getSignature(): string {
   return localStorage.getItem(SIGNATURE_KEY) || "";
 }

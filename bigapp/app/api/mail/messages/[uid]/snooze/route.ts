@@ -5,10 +5,7 @@ import { apiError, withApiErrors } from "@/lib/api/handler";
 
 type Ctx = { params: Promise<{ uid: string }> };
 
-// Snoozing is a DB-only "hide until" marker, not an IMAP move -- see the
-// comment on the snoozed_messages table in _docs/schema.sql for why (no
-// mailbox credentials needed at wake time, only at snooze/unsnooze time,
-// same as every other authenticated request here).
+// A DB-only "hide until" marker, not an IMAP move.
 export async function POST(req: NextRequest, { params }: Ctx) {
   return withApiErrors(async () => {
     const { email } = requireSession(req);

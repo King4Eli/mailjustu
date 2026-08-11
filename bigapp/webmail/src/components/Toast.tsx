@@ -12,8 +12,7 @@ export interface ToastItem {
 export interface PushOptions {
   actionLabel?: string;
   onAction?: () => void;
-  // Defaults to 6s for errors, 3.5s otherwise -- override for e.g. an
-  // undo-send toast that needs to outlive the delay it's covering.
+  // Defaults to 6s for errors, 3.5s otherwise.
   durationMs?: number;
 }
 

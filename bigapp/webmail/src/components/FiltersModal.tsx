@@ -114,9 +114,7 @@ export function FiltersModal({
         </div>
 
         <p className="mb-3 text-xs" style={{ color: "var(--text-faint)" }}>
-          Runs on the server as new mail arrives -- applies even when this app
-          is closed, and from any other mail client on this account. Each
-          message is handled by its first matching rule.
+          Runs even when this app is closed.
         </p>
 
         <form

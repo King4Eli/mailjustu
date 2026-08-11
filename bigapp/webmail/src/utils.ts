@@ -1,10 +1,6 @@
 import type { EmailMessage } from "./types";
 
-// Merges Inbox + Sent into conversations so a reply shows up as an update
-// to the same thread instead of a disconnected new item in Sent (and vice
-// versa for incoming replies to something you sent). A thread only
-// surfaces here if at least one of its messages actually lives in Inbox --
-// a thread you started that nobody replied to yet stays in Sent only.
+// Merges Inbox + Sent into conversations. Only surfaces threads with an Inbox message.
 export function buildInboxThreads(
   inboxMessages: EmailMessage[],
   sentMessages: EmailMessage[],

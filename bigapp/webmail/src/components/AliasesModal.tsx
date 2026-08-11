@@ -55,8 +55,7 @@ export function AliasesModal({
         </div>
 
         <p className="mb-3 text-xs" style={{ color: "var(--text-faint)" }}>
-          Mail sent to an alias lands in this inbox, and you can send as any of
-          them from Compose.
+          Mail to an alias lands here. You can send as any of them too.
         </p>
 
         <form onSubmit={handleCreate} className="mb-4 flex gap-2">

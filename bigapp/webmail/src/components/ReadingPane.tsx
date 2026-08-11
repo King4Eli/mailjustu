@@ -23,18 +23,8 @@ import {
 import type { EmailMessage, FolderInfo } from "../types";
 import { formatFullDate, initials, avatarColor } from "../utils";
 
-// Isolates received HTML in a sandboxed iframe instead of the page's own
-// DOM. Server-side sanitization (lib/api/mailHtml.ts) already strips
-// script/on*/javascript: -- but it deliberately still allows <style> tags
-// and inline `style` attributes for legitimate mail formatting, which
-// would otherwise leak straight into this app's own cascade (a
-// `<style>*{display:none}</style>` in someone's email would nuke the
-// whole UI, not just their message body) or paint a fullscreen phishing
-// overlay via `position:fixed`. No `allow-scripts` in the sandbox --
-// nothing in the frame can execute JS regardless of markup, so
-// `allow-same-origin` alone (needed only so the parent can measure the
-// frame's content height below) can't be used to escape it -- that
-// requires both flags together, and this only ever sets one.
+// Sandboxed iframe, no allow-scripts -- lets sanitized mail keep <style>
+// tags without leaking into the app's own DOM/cascade.
 function buildMailSrcDoc(html: string): string {
   return `<!doctype html><html><head><meta charset="utf-8" /><base target="_blank" />
 <style>
@@ -72,9 +62,7 @@ function MailHtmlFrame({ html }: { html: string }) {
       const doc = iframe?.contentDocument;
       if (!doc?.documentElement) return;
       setHeight(doc.documentElement.scrollHeight);
-      // Remote images load asynchronously and can grow the content after
-      // this first measurement -- keep watching for as long as the frame
-      // (i.e. this message) stays mounted.
+      // Remote images can grow the content after this first measurement.
       if (!observer) {
         observer = new ResizeObserver(() => {
           if (doc.documentElement) setHeight(doc.documentElement.scrollHeight);

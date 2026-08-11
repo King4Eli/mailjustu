@@ -1,7 +1,4 @@
-// DNS TXT records can't hold a string longer than 255 bytes in a single
-// quoted segment -- resolvers concatenate multiple quoted segments within
-// the same record, so anything longer (a DKIM key, typically) has to be
-// pre-split. Short values (SPF, DMARC) just get a single quoted segment.
+// TXT records must be split into <=255-byte quoted segments.
 function quotedTxt(value: string): string {
   const CHUNK = 255;
   if (value.length <= CHUNK) return `"${value}"`;
@@ -12,8 +9,6 @@ function quotedTxt(value: string): string {
 }
 
 // Generates copy-pasteable DNS records for a newly hosted domain.
-// MAIL_HOSTNAME/MAIL_PUBLIC_IP fall back to placeholders until set in
-// ./.env/api.env. dkim is null only for domains predating DKIM support.
 export function buildDnsRecords(
   domain: string,
   dkim: { selector: string; publicKey: string } | null,

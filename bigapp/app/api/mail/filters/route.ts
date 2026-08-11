@@ -8,10 +8,9 @@ import type { RowDataPacket } from "mysql2";
 const FIELDS = new Set(["from", "to", "subject"]);
 const MATCH_TYPES = new Set(["contains", "equals", "domain"]);
 const ACTIONS = new Set(["move", "delete", "mark_read", "star", "allow"]);
-// A "domain" value must be a bare domain (no @, no local part) -- it gets
-// wrapped as "*@value" for a Sieve :matches test (see lib/api/sieve.ts),
-// so an "@" here would silently produce a pattern that can never match.
-const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+// Bare domain only -- gets wrapped as "*@value" for a Sieve :matches test.
+const DOMAIN_PATTERN =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 
 export async function GET(req: NextRequest) {
   return withApiErrors(async () => {
@@ -25,11 +24,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// Every mutation here regenerates the mailbox's whole Sieve script from
-// the current mail_filters rows and reinstalls it over ManageSieve (see
-// lib/api/sieve.ts) -- rules take effect at Dovecot's next delivery, not
-// just next time this app polls, and work from any mail client, not only
-// this one.
+// Every mutation regenerates and reinstalls the mailbox's whole Sieve script.
 export async function POST(req: NextRequest) {
   return withApiErrors(async () => {
     const { email, password } = requireSession(req);

@@ -1,8 +1,4 @@
-// Fixed-window brute-force throttle -- a plain module-level Map, same
-// pattern (and same single-long-running-process assumption) as auth.ts's
-// session store. Counts failed attempts only, per caller-chosen key, so a
-// user who mistypes their password a couple of times but then gets it
-// right isn't penalized.
+// Fixed-window brute-force throttle. Counts failed attempts only, per key.
 interface Bucket {
   count: number;
   resetAt: number;

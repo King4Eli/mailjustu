@@ -12,9 +12,7 @@ import type { RowDataPacket } from "mysql2";
 
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS =
   Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS) || 5;
-// A single IP hitting many different accounts is throttled more loosely
-// than one account being brute-forced, since it also has to cover
-// legitimate shared-IP traffic (offices, NAT, mobile carriers).
+// Looser than the per-email limit -- covers legitimate shared-IP traffic.
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP =
   Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP) || 20;
 const LOGIN_RATE_LIMIT_WINDOW_MS =

@@ -1,7 +1,4 @@
-// Two lightweight in-process pollers, started once from instrumentation.ts
-// (Next.js's documented server-startup hook). Same "single long-running
-// Node process" assumption as auth.ts's session pruning -- see the
-// comment there.
+// Two in-process pollers, started once from instrumentation.ts.
 import { pool } from "./db";
 import { compileAndRelay } from "./mailSend";
 import type { RowDataPacket } from "mysql2";
@@ -29,12 +26,7 @@ interface ScheduledSendAttachmentRow extends RowDataPacket {
   content: Buffer;
 }
 
-// Sends via the mynetworks-trusted Postfix relay (see mailSend.ts) -- no
-// mailbox password needed, so this works even though whichever session
-// created the row may be long gone by the time it fires. What it can't do
-// without that session is append a Sent-folder copy; scheduled sends
-// intentionally skip that rather than persist a password to cover it (see
-// the comment on the scheduled_sends table in _docs/schema.sql).
+// No stored password -- sends via the trusted relay, skips the Sent copy.
 async function processDueScheduledSends() {
   const [rows] = await pool.query<ScheduledSendRow[]>(
     `SELECT id, from_address, to_addresses, cc_addresses, bcc_addresses,
@@ -45,9 +37,7 @@ async function processDueScheduledSends() {
      LIMIT 20`,
   );
   for (const row of rows) {
-    // Claim atomically under a WHERE status='pending' guard before doing
-    // any I/O, so an overlapping tick (or a future multi-instance
-    // deployment) can't double-send the same row.
+    // Claim atomically so an overlapping tick can't double-send.
     const [claimResult] = await pool.query(
       "UPDATE scheduled_sends SET status = 'sent', sent_at = NOW() WHERE id = ? AND status = 'pending'",
       [row.id],
@@ -90,11 +80,7 @@ async function processDueScheduledSends() {
   }
 }
 
-// Snooze itself needs no background action -- see the comment on the
-// snoozed_messages table in _docs/schema.sql: a message "wakes up" simply
-// by GET /api/mail/messages stopping to exclude it once wake_at passes,
-// no IMAP move involved. This is just periodic housekeeping so the table
-// doesn't grow forever with rows nothing will ever query again.
+// Snooze needs no background action -- this just prunes old rows.
 async function pruneWokenSnoozes() {
   await pool.query("DELETE FROM snoozed_messages WHERE wake_at <= NOW()");
 }

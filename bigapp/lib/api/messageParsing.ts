@@ -2,9 +2,7 @@ import { simpleParser } from "mailparser";
 import type { FetchMessageObject } from "imapflow";
 import { computeThreadId, normalizeReferences } from "./threading";
 
-// Shared by app/api/mail/messages/route.ts (list/search) and
-// app/api/mail/snoozed/route.ts (cross-folder snooze aggregation) -- same
-// envelope shape either way, just fetched via a different UID/range source.
+// Shared by the messages list/search route and the snoozed-message route.
 export function cleanPreview(text: string | undefined) {
   if (!text) return "";
   return text.replace(/\s+/g, " ").trim().slice(0, 160);
@@ -37,9 +35,7 @@ export async function parseMessageSummary(msg: FetchMessageObject) {
     inReplyTo,
     references,
     threadId: computeThreadId({ messageId, inReplyTo, references }),
-    // Inline (cid-referenced) images render in the body itself, not as a
-    // downloadable attachment -- keep the paperclip icon and "Attachments"
-    // filter limited to real, separately-listed files.
+    // Inline (cid-referenced) images aren't real attachments.
     attachments: (parsed.attachments || [])
       .map((a, index) => ({
         index,

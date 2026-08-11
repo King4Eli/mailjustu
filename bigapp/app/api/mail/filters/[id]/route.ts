@@ -10,7 +10,8 @@ type Ctx = { params: Promise<{ id: string }> };
 const FIELDS = new Set(["from", "to", "subject"]);
 const MATCH_TYPES = new Set(["contains", "equals", "domain"]);
 const ACTIONS = new Set(["move", "delete", "mark_read", "star", "allow"]);
-const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+const DOMAIN_PATTERN =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   return withApiErrors(async () => {

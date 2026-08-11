@@ -5,10 +5,7 @@ import { apiError, withApiErrors } from "@/lib/api/handler";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// Cancels a still-pending scheduled/undo-window send -- the "Undo" button
-// on compose's send toast, or canceling a "send later" from an Outbox
-// view. Scoped to `status = 'pending'` so it can't cancel (or race) a row
-// the poller has already claimed.
+// Cancels a still-pending send. Scoped to 'pending' so it can't race the poller.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
   return withApiErrors(async () => {
     const { email } = requireSession(req);

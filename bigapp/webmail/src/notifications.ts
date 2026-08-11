@@ -1,9 +1,4 @@
-// Favicon unread badge + desktop notification for new mail arriving via
-// the auto-refresh poller (see App.tsx's silentRefresh/loadFolders). Both
-// are driven purely by the Inbox's unseen count going up between polls --
-// see the effect in App.tsx that calls these -- rather than diffing
-// message lists, so they work correctly no matter which folder is
-// currently open.
+// Favicon unread badge + desktop notification, driven by Inbox unseen count.
 const FAVICON_SIZE = 64;
 const BASE_FAVICON_HREF = "/webmail/favicon.svg";
 
@@ -50,8 +45,7 @@ export function updateFaviconBadge(count: number) {
     link.href = canvas.toDataURL("image/png");
   };
   img.onerror = () => {
-    // Base favicon failed to decode onto canvas -- leave whatever's
-    // already showing rather than breaking the tab icon entirely.
+    // leave whatever's already showing
   };
   img.src = BASE_FAVICON_HREF;
 }
@@ -66,9 +60,7 @@ export function requestNotificationPermission() {
 export function notifyNewMail(newCount: number) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-  // Don't nag while the tab is actually focused and visible -- the UI
-  // itself (unread dots, sidebar counts) already shows this.
-  if (document.visibilityState === "visible") return;
+  if (document.visibilityState === "visible") return; // already visible in-app
   const title = newCount === 1 ? "New message" : `${newCount} new messages`;
   try {
     const notification = new Notification(title, {
@@ -81,7 +73,6 @@ export function notifyNewMail(newCount: number) {
       notification.close();
     };
   } catch {
-    // Notification constructor can throw in some embedding contexts
-    // (e.g. insecure origin, certain mobile browsers) -- non-fatal.
+    // non-fatal
   }
 }

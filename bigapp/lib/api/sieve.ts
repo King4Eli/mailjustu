@@ -14,9 +14,7 @@ export interface FilterRuleRow extends RowDataPacket {
   enabled: boolean;
 }
 
-// One active Sieve script per mailbox, always named the same and always
-// regenerated in full -- see the comment on the mail_filters table in
-// _docs/schema.sql for why rules aren't parsed back out of Sieve.
+// One active script per mailbox, always regenerated in full.
 const SCRIPT_NAME = "mailjustu-filters";
 
 function sieveQuote(s: string): string {
@@ -24,11 +22,7 @@ function sieveQuote(s: string): string {
 }
 
 export function generateSieveScript(rules: FilterRuleRow[]): string {
-  // "allow" rules always run first, ahead of everything else regardless
-  // of their row position -- an allow-listed sender should win over a
-  // block/move rule that would also match them, not lose to it just
-  // because that rule happens to sit earlier in the list. Within each
-  // group, original position order is preserved.
+  // "allow" rules always run first, so they win over a block/move rule.
   const active = rules.filter((r) => r.enabled);
   const ordered = [
     ...active.filter((r) => r.action === "allow"),
@@ -46,10 +40,7 @@ export function generateSieveScript(rules: FilterRuleRow[]): string {
   ];
 
   for (const rule of ordered) {
-    // "domain" is a wildcard match ("*@spammer.com"), not a plain
-    // substring -- :contains would also (usually harmlessly, but
-    // needlessly loosely) match "spammer.com" appearing anywhere in the
-    // header, not just as the address's actual domain.
+    // "domain" is a wildcard match ("*@spammer.com"), not a substring.
     const test =
       rule.match_type === "equals"
         ? `header :is ${sieveQuote(rule.field)} ${sieveQuote(rule.value)}`
@@ -76,10 +67,7 @@ export function generateSieveScript(rules: FilterRuleRow[]): string {
         lines.push(`  keep;`);
         break;
     }
-    // Sieve otherwise keeps testing later rules against the same message
-    // (and applies its implicit keep at the end regardless) -- stop here
-    // so each message is filed by its first matching rule only, same as
-    // the client-side rule editor implies by letting rules be reordered.
+    // Stop so each message is handled by its first matching rule only.
     lines.push(`  stop;`, `}`, "");
   }
   return lines.join("\n");

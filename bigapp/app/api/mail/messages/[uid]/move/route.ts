@@ -17,11 +17,7 @@ export async function POST(
     await withImap(email, password, async (client) => {
       await client.mailboxOpen(folder);
       const target = await resolveFolder(client, email, to);
-      // "Moved to/out of Junk" is the same spam/not-spam signal whether it
-      // came from the dedicated mark-as-spam button or the generic
-      // move-to-folder dropdown -- either way, train Rspamd on it. Fetch
-      // the raw source before the move actually happens, not after: once
-      // moved, this uid no longer resolves in the source folder.
+      // Moving to/out of Junk trains Rspamd; fetch source before it moves.
       const junk = await resolveFolder(client, email, "Junk");
       const isSpamSignal = target === junk;
       const isHamSignal = target !== junk && folder === junk;

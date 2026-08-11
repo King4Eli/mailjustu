@@ -1,5 +1,4 @@
-// Proxied to the real backend server-side by bigapp/next.config.ts --
-// always same-origin, never needs a per-deployment value.
+// Always same-origin, proxied server-side by next.config.ts.
 const API_BASE = "/api";
 
 const TOKEN_KEY = "webui_token";
@@ -33,11 +32,7 @@ function clearSession() {
 
 class ApiError extends Error {}
 
-// App.tsx registers a listener on mount that resets its React state back to
-// "logged out" -- fired synchronously as soon as any request comes back 401,
-// so the UI drops straight to the Login screen instead of leaving the app
-// rendered (and every subsequent request toasting its own "session expired"
-// error) with a stale, no-longer-valid session.
+// Fired the moment any request comes back 401 -- see App.tsx's listener.
 let sessionExpiredHandler: (() => void) | null = null;
 
 export function onSessionExpired(handler: () => void) {
@@ -154,9 +149,7 @@ export function getMessages(
   );
 }
 
-// Real IMAP SEARCH (subject/from/body) across the whole folder, not just
-// whatever page is already loaded client-side. No pagination cursor --
-// capped server-side at SEARCH_RESULT_LIMIT.
+// Real IMAP SEARCH (subject/from/body) across the whole folder.
 export function searchMessages(
   folder: string,
   q: string,
@@ -212,8 +205,7 @@ export function markAsNotSpam(uid: number, folder: string) {
   return moveMessage(uid, folder, "Inbox");
 }
 
-// Hides a message from its folder until wakeAt, then it reappears on its
-// own -- no move involved, see app/api/mail/messages/[uid]/snooze/route.ts.
+// Hides a message from its folder until wakeAt -- no move involved.
 export function snoozeMessage(uid: number, folder: string, wakeAt: Date) {
   return apiFetch(
     `/mail/messages/${uid}/snooze?folder=${encodeURIComponent(folder)}`,
@@ -312,10 +304,7 @@ export function sendMail(opts: SendMailOpts) {
   return apiFetch("/mail/send", { method: "POST", body: buildMailForm(opts) });
 }
 
-// Queues instead of sending immediately -- compose's "Undo send" (a short
-// sendAt delay) and "Send later" (a user-picked one) are both this same
-// call, they just differ in what they pass for sendAt. See
-// app/api/mail/scheduled-sends/route.ts.
+// Queues instead of sending immediately -- backs both Undo Send and Send later.
 export function scheduleSend(
   opts: SendMailOpts,
   sendAt: Date,
@@ -414,9 +403,7 @@ export interface MailFilterInput {
   enabled?: boolean;
 }
 
-// Real server-side filters, installed as a Sieve script over ManageSieve
-// (see lib/api/sieve.ts) -- these run at Dovecot delivery time, not just
-// while this app is open.
+// Real server-side filters, installed as a Sieve script over ManageSieve.
 export function getFilters(): Promise<{ filters: MailFilter[] }> {
   return apiFetch("/mail/filters");
 }

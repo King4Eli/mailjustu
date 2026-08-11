@@ -17,18 +17,11 @@ export async function GET(req: NextRequest) {
     const { email, password } = requireSession(req);
     const folder = req.nextUrl.searchParams.get("folder") || "INBOX";
     const q = req.nextUrl.searchParams.get("q")?.trim() || null;
-    // Older-than cursor: sequence number of the oldest message already
-    // loaded by the client. Omitted on the first page, which fetches the
-    // newest LIST_LIMIT messages instead. Not used in search mode -- a
-    // search runs over the whole folder in one shot, capped at
-    // SEARCH_RESULT_LIMIT, rather than paging.
+    // Sequence-number cursor for older pages; unused in search mode.
     const beforeParam = req.nextUrl.searchParams.get("before");
     const before = beforeParam ? Number(beforeParam) : null;
 
-    // Currently-snoozed uids in this folder -- excluded below so a snoozed
-    // message actually disappears from its folder until it wakes (see
-    // _docs/schema.sql's snoozed_messages comment: no IMAP move involved,
-    // just this filter).
+    // Snoozed messages are hidden until they wake.
     const [snoozedRows] = await pool.query<RowDataPacket[]>(
       "SELECT uid FROM snoozed_messages WHERE mailbox_email = ? AND folder = ? AND wake_at > NOW()",
       [email, folder],
@@ -43,8 +36,7 @@ export async function GET(req: NextRequest) {
       let useUid = false;
       let nextBefore: number | null = null;
       if (q) {
-        // Real IMAP SEARCH across the whole folder (subject/from/body),
-        // not just whatever page happens to already be loaded client-side.
+        // Real IMAP SEARCH across the whole folder.
         const uids = await client.search(
           { or: [{ subject: q }, { from: q }, { text: q }] },
           { uid: true },
@@ -76,8 +68,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// Permanently deletes every message in a folder -- only allowed for
-// Trash/Spam, where "empty" means gone for good rather than moved.
+// Permanently deletes every message in a folder -- Trash/Spam only.
 export async function DELETE(req: NextRequest) {
   return withApiErrors(async () => {
     const { email, password } = requireSession(req);

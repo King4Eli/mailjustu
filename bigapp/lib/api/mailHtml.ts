@@ -10,10 +10,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 }
 
-// Received HTML mail can reference its own image attachments via
-// cid: URIs (inline/embedded images) -- there's no public URL to point
-// those at, so swap them for data: URIs before sanitizing. Remote
-// http(s) images are left alone; they load like in any other webmail.
+// Swaps cid: image references for data: URIs before sanitizing.
 function inlineCidImages(html: string, attachments: InlineImage[]): string {
   let result = html;
   for (const att of attachments) {
@@ -27,23 +24,16 @@ function inlineCidImages(html: string, attachments: InlineImage[]): string {
   return result;
 }
 
-// Plain-text fallback for messages that never had a text/plain part --
-// used for reply quoting, where markup would otherwise leak in verbatim.
+// Plain-text fallback for reply quoting.
 export function htmlToText(html: string): string {
   return sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} })
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-// Renders a received message's HTML body safely: inline images resolved
-// to data URIs, everything else stripped down to a safe tag/attribute
-// allowlist (no script/iframe/on*, no javascript: URLs). Deliberately
-// still allows `style` tags/attributes for legitimate mail formatting --
-// safe only because the frontend renders this inside a sandboxed iframe
-// (webmail/src/components/ReadingPane.tsx's MailHtmlFrame), not injected
-// into the app's own DOM, so nothing here can leak out and affect the
-// app's own styles or overlay its UI. Don't reuse this output outside
-// that isolation without re-checking that assumption.
+// Sanitizes to a safe allowlist. Still allows style tags/attrs -- safe
+// only because the frontend renders this in a sandboxed iframe. Don't
+// reuse this output outside that isolation.
 export function renderSafeHtml(
   html: string,
   attachments: InlineImage[],
