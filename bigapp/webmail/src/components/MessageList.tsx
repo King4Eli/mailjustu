@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Star,
   Paperclip,
@@ -49,7 +49,14 @@ interface MessageListProps {
   // relevant controls and swaps in a spinner so a slow mass-delete doesn't
   // look like a dropped click.
   busy: boolean;
+  // Identifies which folder `messages` belongs to -- used only to re-arm
+  // the load-more trigger on folder switch (see the armedRef comment
+  // below).
+  folderId: string;
 }
+
+// How close to the bottom (in px) triggers "load more".
+const LOAD_MORE_THRESHOLD_PX = 200;
 
 function useIsMdUp() {
   const [isMdUp, setIsMdUp] = useState(
@@ -127,18 +134,37 @@ export function MessageList({
   onLoadMore,
   onEmptyFolder,
   busy,
+  folderId,
 }: MessageListProps) {
   const isMdUp = useIsMdUp();
   const allSelected =
     messages.length > 0 && selectedIds.size === messages.length;
 
+  // "Armed" gates onLoadMore to firing at most once per approach to the
+  // bottom -- without it, a scroll event landing while a page is still in
+  // flight (or a page that doesn't add enough height to clear the
+  // threshold) re-fires immediately on the next scroll tick, chaining
+  // fetches with no further input from the user. Disarmed the instant a
+  // load fires; only re-armed once the user scrolls back out of the
+  // threshold zone, i.e. a fresh approach to the bottom. A ref, not state,
+  // because it must take effect synchronously within the same scroll
+  // event that disarms it -- state's next-render delay is exactly the gap
+  // the bug lived in.
+  const armedRef = useRef(true);
+
+  useEffect(() => {
+    armedRef.current = true;
+  }, [folderId]);
+
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
-    if (
-      hasMore &&
-      !loadingMore &&
-      el.scrollHeight - el.scrollTop - el.clientHeight < 200
-    ) {
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom >= LOAD_MORE_THRESHOLD_PX) {
+      armedRef.current = true;
+      return;
+    }
+    if (armedRef.current && hasMore && !loadingMore) {
+      armedRef.current = false;
       onLoadMore();
     }
   }
@@ -288,7 +314,7 @@ export function MessageList({
                 Move to...
               </option>
               {folders
-                .filter((f) => f.id !== "STARRED")
+                .filter((f) => f.id !== "STARRED" && f.id !== "SNOOZED")
                 .map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}

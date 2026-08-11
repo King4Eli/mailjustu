@@ -5,18 +5,27 @@ import { MessageList } from "./components/MessageList";
 import { ReadingPane } from "./components/ReadingPane";
 import { ComposeModal, type ComposeDraft } from "./components/ComposeModal";
 import { AliasesModal } from "./components/AliasesModal";
+import { SignatureModal } from "./components/SignatureModal";
+import { FiltersModal } from "./components/FiltersModal";
 import { Login } from "./components/Login";
 import { useToasts, ToastStack } from "./components/Toast";
 import * as api from "./api";
-import type { ApiFolder, ApiMessage, ApiAlias } from "./api";
+import type { ApiFolder, ApiMessage, ApiAlias, MailFilter } from "./api";
 import type { EmailMessage, FolderInfo, MessageFilter } from "./types";
 import {
   getListWidth,
   setListWidth as persistListWidth,
   LIST_WIDTH_MIN,
   LIST_WIDTH_MAX,
+  getSignature,
+  setSignature as persistSignature,
 } from "./settings";
 import { buildInboxThreads } from "./utils";
+import {
+  updateFaviconBadge,
+  requestNotificationPermission,
+  notifyNewMail,
+} from "./notifications";
 
 function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
   return {
@@ -44,7 +53,10 @@ function toEmailMessage(m: ApiMessage, sourceFolder?: string): EmailMessage {
 // into whatever's already on screen (including older pages pulled in by
 // "load more") -- fresh entries win for flag/content updates, anything
 // older that isn't in the fresh page is left alone rather than dropped.
-function mergeById(prev: EmailMessage[], fresh: EmailMessage[]): EmailMessage[] {
+function mergeById(
+  prev: EmailMessage[],
+  fresh: EmailMessage[],
+): EmailMessage[] {
   const freshIds = new Set(fresh.map((m) => m.id));
   const keep = prev.filter((m) => !freshIds.has(m.id));
   return [...fresh, ...keep].sort(
@@ -73,6 +85,38 @@ function combinedBody(draft: ComposeDraft): string {
     : draft.body;
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// HTML counterpart to combinedBody -- the compose editor already produces
+// real HTML for whatever the user typed (see ComposeModal's contentEditable
+// body), so this just needs to fold the plain-text quoted block in as a
+// <blockquote>. Returns undefined for a plain, unformatted, non-reply
+// message so a trivial send doesn't grow a redundant HTML alternative part.
+function combinedHtml(draft: ComposeDraft): string | undefined {
+  const hasRichContent = Boolean(draft.html?.trim());
+  if (!hasRichContent && !draft.quoteBody) return undefined;
+  const bodyHtml = hasRichContent
+    ? draft.html
+    : `<div>${escapeHtml(draft.body).replace(/\n/g, "<br>")}</div>`;
+  const quoteHtml = draft.quoteBody
+    ? `<blockquote style="border-left:2px solid #ccc;margin:1em 0 0;padding-left:1em;color:#666;">${
+        draft.quoteHeading ? `<p>${escapeHtml(draft.quoteHeading)}</p>` : ""
+      }<div>${escapeHtml(draft.quoteBody).replace(/\n/g, "<br>")}</div></blockquote>`
+    : "";
+  return `${bodyHtml}${quoteHtml}`;
+}
+
+// Appended to a fresh draft's body (new compose or reply/forward, not a
+// reopened saved draft) if the user has one configured -- see
+// SignatureModal / settings.ts.
+function withSignature(body: string): string {
+  const sig = getSignature();
+  if (!sig) return body;
+  return body ? `${body}\n\n${sig}` : sig;
+}
+
 export default function App() {
   const [email, setEmail] = useState<string | null>(
     () => api.getStoredSession()?.email ?? null,
@@ -88,6 +132,10 @@ export default function App() {
     null,
   );
   const [query, setQuery] = useState("");
+  // True while `messages` holds server-side search results rather than the
+  // active folder's normal contents -- disables pagination/auto-refresh
+  // (see loadMoreMessages/silentRefresh) so they don't clobber a search.
+  const [searching, setSearching] = useState(false);
   const [filter, setFilter] = useState<MessageFilter>("all");
   const [loading, setLoading] = useState(false);
   const { toasts, push, dismiss } = useToasts();
@@ -100,13 +148,27 @@ export default function App() {
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null);
   const [aliases, setAliases] = useState<ApiAlias[]>([]);
   const [aliasesOpen, setAliasesOpen] = useState(false);
+  const [filters, setFilters] = useState<MailFilter[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [signatureOpen, setSignatureOpen] = useState(false);
   const [activeAlias, setActiveAlias] = useState<string | null>(null);
+  // Accumulates (email -> display name) across every folder/message this
+  // session has loaded, for compose's To/Cc autocomplete -- not a real
+  // address book, just "people you've already exchanged mail with lately".
+  // A ref (not state) since it's read fresh at render time and mutating it
+  // shouldn't itself trigger a re-render.
+  const contactsRef = useRef<Map<string, string>>(new Map());
   const [usage, setUsage] = useState<{
     usedBytes: number | null;
     quotaMb: number | null;
   } | null>(null);
   const [listWidth, setListWidthState] = useState(() => getListWidth());
   const resizingRef = useRef(false);
+  // null until the first folders load -- distinguishes "haven't checked
+  // yet" from "checked and it's zero" so the notification effect below
+  // doesn't fire for a mailbox's entire pre-existing unread backlog on
+  // first load, only for genuine increases after that.
+  const prevInboxUnseenRef = useRef<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -141,15 +203,23 @@ export default function App() {
         unseen: 0,
         messages: 0,
       };
-      const withStarred =
+      const snoozed: FolderInfo = {
+        id: "SNOOZED",
+        name: "Snoozed",
+        icon: "snoozed",
+        unseen: 0,
+        messages: 0,
+      };
+      const withPseudoFolders =
         inboxIndex >= 0
           ? [
               ...mapped.slice(0, inboxIndex + 1),
               starred,
+              snoozed,
               ...mapped.slice(inboxIndex + 1),
             ]
-          : [starred, ...mapped];
-      setFolders(withStarred);
+          : [starred, snoozed, ...mapped];
+      setFolders(withPseudoFolders);
     } catch (err) {
       push(err instanceof Error ? err.message : "Failed to load folders");
     }
@@ -164,6 +234,15 @@ export default function App() {
     }
   }
 
+  async function loadFilters() {
+    try {
+      const { filters: apiFilters } = await api.getFilters();
+      setFilters(apiFilters);
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to load filters");
+    }
+  }
+
   async function loadMessages(folderId: string) {
     setLoading(true);
     setHasMore(false);
@@ -173,7 +252,9 @@ export default function App() {
         // no stable per-folder cursor to page further on, so pagination is
         // intentionally not offered here.
         paginationRef.current = { mode: "none" };
-        const realFolders = folders.filter((f) => f.id !== "STARRED");
+        const realFolders = folders.filter(
+          (f) => f.id !== "STARRED" && f.id !== "SNOOZED",
+        );
         const results = await Promise.all(
           realFolders.map(async (f) => {
             const { messages: apiMessages } = await api.getMessages(f.id);
@@ -188,6 +269,17 @@ export default function App() {
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
           );
         setMessages(merged);
+      } else if (folderId === "SNOOZED") {
+        // Server-aggregated (see api.getSnoozedMessages/app/api/mail/snoozed)
+        // -- unlike STARRED this can't be built from each folder's already-
+        // fetched first page, since a snoozed message is deliberately
+        // excluded from its folder's normal listing while asleep.
+        paginationRef.current = { mode: "none" };
+        const { messages: apiMessages } = await api.getSnoozedMessages();
+        // Already sorted soonest-to-wake-first by the server -- keep that
+        // order rather than the usual newest-first, since "when does this
+        // come back" is the relevant ordering here.
+        setMessages(apiMessages.map((m) => toEmailMessage(m, m.sourceFolder)));
       } else {
         const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
         const sentFolder = folders.find((f) => f.icon === "\\Sent");
@@ -294,8 +386,9 @@ export default function App() {
   // rendered (see mergeById) instead of replacing it outright, so it
   // doesn't clobber older pages the user has scrolled/loaded into view.
   async function silentRefresh() {
-    if (!email || folders.length === 0 || loading || loadingMore) return;
-    if (activeFolder === "STARRED") return;
+    if (!email || folders.length === 0 || loading || loadingMore || searching)
+      return;
+    if (activeFolder === "STARRED" || activeFolder === "SNOOZED") return;
     try {
       const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
       const sentFolder = folders.find((f) => f.icon === "\\Sent");
@@ -338,13 +431,31 @@ export default function App() {
     if (email) {
       loadFolders();
       loadAliases();
+      loadFilters();
       api
         .getUsage()
         .then(setUsage)
         .catch(() => {});
+      requestNotificationPermission();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
+
+  // Favicon unread badge + desktop notification, driven by the Inbox's
+  // unseen count (refreshed by every loadFolders() call, including the
+  // auto-refresh poller) rather than by diffing message lists -- see
+  // notifications.ts for why that's simpler and folder-independent.
+  useEffect(() => {
+    const inboxUnseen = folders.find((f) => f.icon === "\\Inbox")?.unseen ?? 0;
+    updateFaviconBadge(inboxUnseen);
+    if (
+      prevInboxUnseenRef.current != null &&
+      inboxUnseen > prevInboxUnseenRef.current
+    ) {
+      notifyNewMail(inboxUnseen - prevInboxUnseenRef.current);
+    }
+    prevInboxUnseenRef.current = inboxUnseen;
+  }, [folders]);
 
   // Registered once -- api.ts calls this the moment any request comes back
   // 401, so an expired session drops straight to the Login screen instead
@@ -358,9 +469,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (email && folders.length > 0) loadMessages(activeFolder);
+    if (email && folders.length > 0 && !query.trim())
+      loadMessages(activeFolder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, activeFolder, folders.length]);
+
+  // Folds this batch of messages' senders/recipients into the running
+  // contacts list (see contactsRef above) -- fires on every folder
+  // load/search/refresh, so it only ever grows across the session.
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.from?.email) {
+        const key = m.from.email.toLowerCase();
+        if (!contactsRef.current.has(key))
+          contactsRef.current.set(key, m.from.name || m.from.email);
+      }
+      for (const addr of [...m.to, ...(m.cc || [])]) {
+        const key = addr.toLowerCase();
+        if (!contactsRef.current.has(key)) contactsRef.current.set(key, addr);
+      }
+    }
+  }, [messages]);
 
   // Auto-refresh: re-polls the active folder every 30s without a page
   // reload or navigation (see silentRefresh above for the merge logic).
@@ -373,6 +502,45 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, activeFolder, folders.length]);
 
+  // Debounced server-side search (real IMAP SEARCH over the whole folder,
+  // not just whatever's already loaded -- see api.searchMessages). Clearing
+  // the box drops back to the normal paginated folder view.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      if (searching) {
+        setSearching(false);
+        if (email && folders.length > 0) loadMessages(activeFolder);
+      }
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const { messages: apiMessages } = await api.searchMessages(
+          activeFolder,
+          trimmed,
+        );
+        setMessages(
+          apiMessages
+            .map((m) => toEmailMessage(m))
+            .sort(
+              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+            ),
+        );
+        setSearching(true);
+        setHasMore(false);
+        paginationRef.current = { mode: "none" };
+      } catch (err) {
+        push(err instanceof Error ? err.message : "Search failed");
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, activeFolder]);
+
   if (!email) {
     return (
       <Login
@@ -384,16 +552,10 @@ export default function App() {
     );
   }
 
-  const searchedMessages = query.trim()
-    ? messages.filter(
-        (m) =>
-          m.subject.toLowerCase().includes(query.toLowerCase()) ||
-          m.from.name.toLowerCase().includes(query.toLowerCase()) ||
-          m.preview.toLowerCase().includes(query.toLowerCase()),
-      )
-    : messages;
-
-  const folderMessages = searchedMessages.filter((m) => {
+  // While searching, `messages` already holds the server's search results
+  // (see the debounced search effect above) -- no further client-side
+  // text filtering needed on top of it.
+  const folderMessages = messages.filter((m) => {
     switch (filter) {
       case "unread":
         return !m.read;
@@ -429,6 +591,7 @@ export default function App() {
   const activeFolderIcon = folders.find((f) => f.id === activeFolder)?.icon;
   const canEmptyActiveFolder =
     activeFolderIcon === "\\Trash" || activeFolderIcon === "\\Junk";
+  const isSnoozedFolder = activeFolder === "SNOOZED";
 
   async function handleSelect(message: EmailMessage) {
     const folder = message.sourceFolder || activeFolder;
@@ -701,6 +864,30 @@ export default function App() {
     }
   }
 
+  async function snoozeMessage(id: string, wakeAt: Date) {
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
+    try {
+      await api.snoozeMessage(Number(id), folder, wakeAt);
+      clearSelectionAndRemove(id);
+      push(`Snoozed until ${wakeAt.toLocaleString()}`, "success");
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to snooze message");
+    }
+  }
+
+  async function unsnoozeMessage(id: string) {
+    const message = messages.find((m) => m.id === id);
+    const folder = message?.sourceFolder || activeFolder;
+    try {
+      await api.unsnoozeMessage(Number(id), folder);
+      clearSelectionAndRemove(id);
+      push("Un-snoozed", "success");
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to un-snooze message");
+    }
+  }
+
   async function markSpam(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
@@ -805,6 +992,29 @@ export default function App() {
     }
   }
 
+  async function createFilter(input: api.MailFilterInput) {
+    await api.createFilter(input);
+    loadFilters();
+  }
+
+  async function toggleFilter(id: number, enabled: boolean) {
+    try {
+      await api.updateFilter(id, { enabled });
+      loadFilters();
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to update filter");
+    }
+  }
+
+  async function deleteFilterRule(id: number) {
+    try {
+      await api.deleteFilter(id);
+      loadFilters();
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to delete filter");
+    }
+  }
+
   // A message may have arrived at an alias rather than the primary
   // address (e.g. sales@... forwarding into this mailbox) -- default the
   // reply's From to whichever of the user's own addresses it was actually
@@ -851,7 +1061,7 @@ export default function App() {
         : message.subject.startsWith("Re:")
           ? message.subject
           : `Re: ${message.subject}`,
-      body: "",
+      body: withSignature(""),
       quoteHeading,
       quoteBody,
       inReplyTo: isForward ? undefined : message.messageId,
@@ -863,32 +1073,77 @@ export default function App() {
     });
   }
 
+  // Undo Send is implemented as a very-short scheduled send (see
+  // api.scheduleSend / app/api/mail/scheduled-sends) rather than a plain
+  // client-side setTimeout, deliberately -- a pure client-side delay would
+  // silently lose the message if the tab closes during the undo window.
+  // Going through the same DB-backed queue "Send later" uses means the
+  // undo window survives a closed tab exactly like any other scheduled
+  // send; the tradeoff is up to one poll interval (see
+  // SCHEDULED_SEND_POLL_SECONDS) of extra latency after the undo window.
+  const UNDO_SEND_DELAY_SECONDS = 10;
+
+  function draftToSendOpts(draft: ComposeDraft): api.SendMailOpts {
+    return {
+      to: draft.to,
+      cc: draft.cc,
+      bcc: draft.bcc,
+      subject: draft.subject,
+      body: combinedBody(draft),
+      html: combinedHtml(draft),
+      from: draft.from,
+      attachments: draft.attachments,
+      inReplyTo: draft.inReplyTo,
+      references: draft.references,
+    };
+  }
+
+  async function discardIfEditingDraft(draft: ComposeDraft) {
+    if (draft.draftUid != null && draft.draftFolder) {
+      await api.discardDraft(draft.draftUid, draft.draftFolder).catch(() => {});
+    }
+  }
+
   async function handleSend(draft: ComposeDraft) {
     try {
-      await api.sendMail({
-        to: draft.to,
-        cc: draft.cc,
-        bcc: draft.bcc,
-        subject: draft.subject,
-        body: combinedBody(draft),
-        from: draft.from,
-        attachments: draft.attachments,
-        inReplyTo: draft.inReplyTo,
-        references: draft.references,
-      });
-      if (draft.draftUid != null && draft.draftFolder) {
-        await api
-          .discardDraft(draft.draftUid, draft.draftFolder)
-          .catch(() => {});
-      }
+      const sendAt = new Date(Date.now() + UNDO_SEND_DELAY_SECONDS * 1000);
+      const { id } = await api.scheduleSend(draftToSendOpts(draft), sendAt);
+      await discardIfEditingDraft(draft);
       setComposeDraft(null);
-      push("Message sent", "success");
-      loadFolders();
-      // Refreshes whatever's currently open -- for the Inbox this re-merges
-      // threads so a reply just sent shows up in its conversation right away.
-      loadMessages(activeFolder);
+      push(`Sending in ${UNDO_SEND_DELAY_SECONDS}s…`, "success", {
+        actionLabel: "Undo",
+        durationMs: UNDO_SEND_DELAY_SECONDS * 1000 + 1000,
+        onAction: () => {
+          api.cancelScheduledSend(id).then(
+            () => push("Send canceled", "success"),
+            () => push("Too late to undo -- already sent", "error"),
+          );
+        },
+      });
+      // The actual send (and best-effort Sent-folder append) happens
+      // server-side once send_at passes, not synchronously here -- refresh
+      // afterwards so Sent/thread views pick it up.
+      window.setTimeout(
+        () => {
+          loadFolders();
+          loadMessages(activeFolder);
+        },
+        UNDO_SEND_DELAY_SECONDS * 1000 + 1500,
+      );
     } catch (err) {
       push(err instanceof Error ? err.message : "Failed to send message");
+    }
+  }
+
+  async function handleScheduleSend(draft: ComposeDraft, sendAt: Date) {
+    try {
+      await api.scheduleSend(draftToSendOpts(draft), sendAt);
+      await discardIfEditingDraft(draft);
+      setComposeDraft(null);
+      push(`Scheduled to send ${sendAt.toLocaleString()}`, "success");
+      loadFolders();
+    } catch (err) {
+      push(err instanceof Error ? err.message : "Failed to schedule message");
     }
   }
 
@@ -902,6 +1157,12 @@ export default function App() {
     setSelectedIds(new Set());
     setAliases([]);
     setActiveAlias(null);
+    setQuery("");
+    setSearching(false);
+    // Re-arm the "skip the first load's backlog" guard (see the effect
+    // that calls notifyNewMail) so logging back in doesn't immediately
+    // notify for whatever's already unread.
+    prevInboxUnseenRef.current = null;
   }
 
   async function handleLogout() {
@@ -951,12 +1212,15 @@ export default function App() {
           setSelectedIds(new Set());
           setFilter("all");
         }}
-        onCompose={() => setComposeDraft({ to: "", subject: "", body: "" })}
+        onCompose={() =>
+          setComposeDraft({ to: "", subject: "", body: withSignature("") })
+        }
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onCreateFolder={createFolder}
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
+        onOpenFilters={() => setFiltersOpen(true)}
         usage={usage}
         aliases={aliases}
         activeAlias={activeAlias}
@@ -1012,8 +1276,11 @@ export default function App() {
               hasMore={hasMore}
               loadingMore={loadingMore}
               onLoadMore={loadMoreMessages}
-              onEmptyFolder={canEmptyActiveFolder ? emptyCurrentFolder : undefined}
+              onEmptyFolder={
+                canEmptyActiveFolder ? emptyCurrentFolder : undefined
+              }
               busy={bulkBusy}
+              folderId={activeFolder}
             />
           </div>
 
@@ -1036,6 +1303,9 @@ export default function App() {
               onMarkNotSpam={markNotSpam}
               isSpamFolder={isSpamFolder}
               onMoveTo={moveTo}
+              onSnooze={snoozeMessage}
+              isSnoozedFolder={isSnoozedFolder}
+              onUnsnooze={unsnoozeMessage}
               onDownloadAttachment={downloadAttachment}
               onReply={handleReply}
               onBack={() => {
@@ -1053,10 +1323,16 @@ export default function App() {
           onClose={() => setComposeDraft(null)}
           onSaveDraft={saveDraft}
           onSend={handleSend}
+          onScheduleSend={handleScheduleSend}
           onDeleteDraft={handleDeleteDraft}
           onValidationError={(message) => push(message, "error")}
+          onEditSignature={() => setSignatureOpen(true)}
           primaryEmail={email}
           aliases={aliases.map((a) => a.source)}
+          contacts={Array.from(contactsRef.current, ([email, name]) => ({
+            email,
+            name,
+          }))}
         />
       )}
 
@@ -1066,6 +1342,25 @@ export default function App() {
           onClose={() => setAliasesOpen(false)}
           onCreate={createAlias}
           onDelete={deleteAlias}
+        />
+      )}
+
+      {signatureOpen && (
+        <SignatureModal
+          initialSignature={getSignature()}
+          onClose={() => setSignatureOpen(false)}
+          onSave={persistSignature}
+        />
+      )}
+
+      {filtersOpen && (
+        <FiltersModal
+          filters={filters}
+          folders={folders}
+          onClose={() => setFiltersOpen(false)}
+          onCreate={createFilter}
+          onToggle={toggleFilter}
+          onDelete={deleteFilterRule}
         />
       )}
 

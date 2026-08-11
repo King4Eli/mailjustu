@@ -5,6 +5,16 @@ export interface ToastItem {
   id: number;
   message: string;
   type: "success" | "error";
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
+export interface PushOptions {
+  actionLabel?: string;
+  onAction?: () => void;
+  // Defaults to 6s for errors, 3.5s otherwise -- override for e.g. an
+  // undo-send toast that needs to outlive the delay it's covering.
+  durationMs?: number;
 }
 
 export function useToasts() {
@@ -16,10 +26,25 @@ export function useToasts() {
   }, []);
 
   const push = useCallback(
-    (message: string, type: ToastItem["type"] = "error") => {
+    (
+      message: string,
+      type: ToastItem["type"] = "error",
+      opts?: PushOptions,
+    ) => {
       const id = ++nextId.current;
-      setToasts((prev) => [...prev, { id, message, type }]);
-      window.setTimeout(() => dismiss(id), type === "error" ? 6000 : 3500);
+      setToasts((prev) => [
+        ...prev,
+        {
+          id,
+          message,
+          type,
+          actionLabel: opts?.actionLabel,
+          onAction: opts?.onAction,
+        },
+      ]);
+      const durationMs = opts?.durationMs ?? (type === "error" ? 6000 : 3500);
+      window.setTimeout(() => dismiss(id), durationMs);
+      return id;
     },
     [dismiss],
   );
@@ -63,6 +88,18 @@ export function ToastStack({
             />
           )}
           <span className="min-w-0 flex-1">{toast.message}</span>
+          {toast.actionLabel && toast.onAction && (
+            <button
+              onClick={() => {
+                toast.onAction!();
+                onDismiss(toast.id);
+              }}
+              className="shrink-0 text-xs font-semibold underline"
+              style={{ color: "var(--accent)" }}
+            >
+              {toast.actionLabel}
+            </button>
+          )}
           <button
             onClick={() => onDismiss(toast.id)}
             style={{ color: "var(--text-faint)" }}

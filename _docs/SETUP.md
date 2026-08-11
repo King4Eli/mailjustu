@@ -125,10 +125,15 @@ time except where noted.
   `DOVEADM_HOST`/`DOVEADM_PORT` (Dovecot's HTTP API, for usage stats);
   `SUPER_ADMIN_EMAILS`/`SUPER_ADMIN_PASSWORD` (see
   [ADMIN.md](./ADMIN.md)); `SESSION_TTL_MINUTES`;
+  `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`/`LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP`/
+  `LOGIN_RATE_LIMIT_WINDOW_MINUTES` (in-memory login throttle, see
+  `lib/api/rateLimit.ts`); `MESSAGE_LIST_PAGE_SIZE`;
   `MAX_MAILBOXES_PER_DOMAIN`/`MAX_ALIASES_PER_MAILBOX`/`MAX_FOLDERS_PER_MAILBOX`;
   `MAX_ATTACHMENTS_PER_MESSAGE`/`MAX_ATTACHMENT_SIZE_MB`;
   `DEFAULT_MAILBOX_QUOTA_MB`; `MAIL_HOSTNAME`/`MAIL_PUBLIC_IP` (also used
-  by `docker-compose.yml` itself, e.g. Postfix's `hostname:`).
+  by `docker-compose.yml` itself, e.g. Postfix's `hostname:`);
+  `SCHEDULED_SEND_POLL_SECONDS`/`SNOOZE_POLL_SECONDS` (background pollers,
+  see `lib/api/scheduler.ts`).
 - **`dovecot.env`** -- `DOVEADM_PASSWORD`, shared into `mail_justu_server`
   too (single copy, not duplicated -- see the comment in
   `docker-compose.yml`).

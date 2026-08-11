@@ -1,6 +1,4 @@
 import { NextRequest } from "next/server";
-import crypto from "node:crypto";
-import nodemailer from "nodemailer";
 import { withImap, resolveFolder } from "@/lib/api/imap";
 import { requireSession } from "@/lib/api/auth";
 import { pool } from "@/lib/api/db";
@@ -9,6 +7,7 @@ import {
   parseFormAttachments,
 } from "@/lib/api/attachments";
 import { apiError, withApiErrors } from "@/lib/api/handler";
+import { compileAndRelay } from "@/lib/api/mailSend";
 import type { RowDataPacket } from "mysql2";
 
 export async function POST(req: NextRequest) {
@@ -20,6 +19,7 @@ export async function POST(req: NextRequest) {
     const bcc = form.get("bcc") as string | null;
     const subject = form.get("subject") as string | null;
     const body = form.get("body") as string | null;
+    const html = form.get("html") as string | null;
     const from = form.get("from") as string | null;
     const inReplyTo = (form.get("inReplyTo") as string | null) || undefined;
     const referencesRaw = (form.get("references") as string | null) || "";
@@ -56,51 +56,17 @@ export async function POST(req: NextRequest) {
       fromAddress = from;
     }
 
-    const mailOptions = {
+    const { raw, messageId } = await compileAndRelay({
       from: fromAddress,
       to,
       cc: cc || undefined,
       bcc: bcc || undefined,
       subject: subject || "(no subject)",
       text: body || "",
-      attachments: attachments.map((f) => ({
-        filename: f.filename,
-        content: f.content,
-        contentType: f.contentType,
-      })),
-      messageId: `<${crypto.randomUUID()}@${fromAddress.split("@")[1]}>`,
+      html: html || undefined,
+      attachments,
       inReplyTo,
-      references: references.length > 0 ? references : undefined,
-    };
-
-    // Compile once (no network I/O) so the exact same MIME source --
-    // attachments included -- both goes out over SMTP and gets saved to
-    // Sent, instead of building the message twice.
-    // buffer: true guarantees a Buffer at runtime; nodemailer's types don't
-    // narrow on that option, so they still say Buffer | Readable.
-    const compiler = nodemailer.createTransport({
-      streamTransport: true,
-      buffer: true,
-    });
-    const { message: raw, messageId } = (await compiler.sendMail(
-      mailOptions,
-    )) as { message: Buffer; messageId: string };
-
-    const transport = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "mail_justu_postfix",
-      port: Number(process.env.SMTP_PORT) || 25,
-      secure: false,
-      tls: { rejectUnauthorized: false },
-    });
-    const envelopeTo = [to, cc, bcc]
-      .filter(Boolean)
-      .join(",")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    await transport.sendMail({
-      envelope: { from: fromAddress, to: envelopeTo },
-      raw,
+      references,
     });
 
     await withImap(email, password, async (client) => {

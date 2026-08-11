@@ -16,6 +16,8 @@ import {
   Folder,
   X,
   RefreshCw,
+  Clock,
+  Filter,
 } from "lucide-react";
 import type { FolderInfo } from "../types";
 import type { ApiAlias } from "../api";
@@ -32,10 +34,13 @@ const ICONS: Record<
   "\\Trash": Trash2,
   "\\Archive": Archive,
   starred: Star,
+  snoozed: Clock,
 };
 
+const PSEUDO_FOLDER_IDS = new Set(["STARRED", "SNOOZED"]);
+
 function isCustomFolder(folder: FolderInfo) {
-  return folder.id !== "STARRED" && !ICONS[folder.icon];
+  return !PSEUDO_FOLDER_IDS.has(folder.id) && !ICONS[folder.icon];
 }
 
 interface SidebarProps {
@@ -48,6 +53,7 @@ interface SidebarProps {
   onCreateFolder: (name: string) => void;
   onDeleteFolder: (path: string) => void;
   onOpenAliases: () => void;
+  onOpenFilters: () => void;
   usage: { usedBytes: number | null; quotaMb: number | null } | null;
   aliases: ApiAlias[];
   activeAlias: string | null;
@@ -66,6 +72,7 @@ export function Sidebar({
   onCreateFolder,
   onDeleteFolder,
   onOpenAliases,
+  onOpenFilters,
   usage,
   aliases,
   activeAlias,
@@ -353,6 +360,14 @@ export function Sidebar({
           className="mt-auto flex flex-col gap-2 border-t px-2 pt-3"
           style={{ borderColor: "var(--border)" }}
         >
+          <button
+            onClick={onOpenFilters}
+            className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
+            style={{ color: "var(--text-faint)" }}
+          >
+            <Filter size={15} />
+            <span>Mail filters</span>
+          </button>
           {usage?.usedBytes != null && (
             <div className="px-1 py-1">
               <div

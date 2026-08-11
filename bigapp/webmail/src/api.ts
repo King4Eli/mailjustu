@@ -143,10 +143,26 @@ export interface ApiMessage {
 export function getMessages(
   folder: string,
   before?: number | null,
-): Promise<{ folder: string; messages: ApiMessage[]; nextBefore: number | null }> {
+): Promise<{
+  folder: string;
+  messages: ApiMessage[];
+  nextBefore: number | null;
+}> {
   const beforeParam = before != null ? `&before=${before}` : "";
   return apiFetch(
     `/mail/messages?folder=${encodeURIComponent(folder)}${beforeParam}`,
+  );
+}
+
+// Real IMAP SEARCH (subject/from/body) across the whole folder, not just
+// whatever page is already loaded client-side. No pagination cursor --
+// capped server-side at SEARCH_RESULT_LIMIT.
+export function searchMessages(
+  folder: string,
+  q: string,
+): Promise<{ folder: string; messages: ApiMessage[] }> {
+  return apiFetch(
+    `/mail/messages?folder=${encodeURIComponent(folder)}&q=${encodeURIComponent(q)}`,
   );
 }
 
@@ -196,6 +212,28 @@ export function markAsNotSpam(uid: number, folder: string) {
   return moveMessage(uid, folder, "Inbox");
 }
 
+// Hides a message from its folder until wakeAt, then it reappears on its
+// own -- no move involved, see app/api/mail/messages/[uid]/snooze/route.ts.
+export function snoozeMessage(uid: number, folder: string, wakeAt: Date) {
+  return apiFetch(
+    `/mail/messages/${uid}/snooze?folder=${encodeURIComponent(folder)}`,
+    { method: "POST", body: JSON.stringify({ wakeAt: wakeAt.toISOString() }) },
+  );
+}
+
+export function unsnoozeMessage(uid: number, folder: string) {
+  return apiFetch(
+    `/mail/messages/${uid}/snooze?folder=${encodeURIComponent(folder)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getSnoozedMessages(): Promise<{
+  messages: (ApiMessage & { sourceFolder: string; wakeAt: string })[];
+}> {
+  return apiFetch("/mail/snoozed");
+}
+
 export async function downloadAttachment(
   uid: number,
   folder: string,
@@ -241,29 +279,67 @@ export function deleteMessage(uid: number, folder: string) {
   );
 }
 
-export function sendMail(opts: {
+export interface SendMailOpts {
   to: string;
   cc?: string;
   bcc?: string;
   subject: string;
   body: string;
+  html?: string;
   from?: string;
   attachments?: File[];
   inReplyTo?: string;
   references?: string[];
-}) {
+}
+
+function buildMailForm(opts: SendMailOpts): FormData {
   const form = new FormData();
   form.set("to", opts.to);
   if (opts.cc) form.set("cc", opts.cc);
   if (opts.bcc) form.set("bcc", opts.bcc);
   form.set("subject", opts.subject);
   form.set("body", opts.body);
+  if (opts.html) form.set("html", opts.html);
   if (opts.from) form.set("from", opts.from);
   if (opts.inReplyTo) form.set("inReplyTo", opts.inReplyTo);
   if (opts.references && opts.references.length > 0)
     form.set("references", opts.references.join(" "));
   for (const file of opts.attachments || []) form.append("attachments", file);
-  return apiFetch("/mail/send", { method: "POST", body: form });
+  return form;
+}
+
+export function sendMail(opts: SendMailOpts) {
+  return apiFetch("/mail/send", { method: "POST", body: buildMailForm(opts) });
+}
+
+// Queues instead of sending immediately -- compose's "Undo send" (a short
+// sendAt delay) and "Send later" (a user-picked one) are both this same
+// call, they just differ in what they pass for sendAt. See
+// app/api/mail/scheduled-sends/route.ts.
+export function scheduleSend(
+  opts: SendMailOpts,
+  sendAt: Date,
+): Promise<{ ok: boolean; id: number; sendAt: string }> {
+  const form = buildMailForm(opts);
+  form.set("sendAt", sendAt.toISOString());
+  return apiFetch("/mail/scheduled-sends", { method: "POST", body: form });
+}
+
+export function cancelScheduledSend(id: number) {
+  return apiFetch(`/mail/scheduled-sends/${id}`, { method: "DELETE" });
+}
+
+export interface ScheduledSendSummary {
+  id: number;
+  to_addresses: string;
+  subject: string;
+  send_at: string;
+}
+
+export function listScheduledSends(): Promise<{
+  scheduled: ScheduledSendSummary[];
+}> {
+  return apiFetch("/mail/scheduled-sends");
 }
 
 export function saveDraft(opts: {
@@ -314,4 +390,51 @@ export function createAlias(alias: string) {
 
 export function deleteAlias(id: number) {
   return apiFetch(`/mail/aliases/${id}`, { method: "DELETE" });
+}
+
+export interface MailFilter {
+  id: number;
+  name: string;
+  field: "from" | "to" | "subject";
+  match_type: "contains" | "equals";
+  value: string;
+  action: "move" | "delete" | "mark_read" | "star";
+  action_folder: string | null;
+  position: number;
+  enabled: boolean;
+}
+
+export interface MailFilterInput {
+  name: string;
+  field: MailFilter["field"];
+  matchType: MailFilter["match_type"];
+  value: string;
+  action: MailFilter["action"];
+  actionFolder?: string;
+  enabled?: boolean;
+}
+
+// Real server-side filters, installed as a Sieve script over ManageSieve
+// (see lib/api/sieve.ts) -- these run at Dovecot delivery time, not just
+// while this app is open.
+export function getFilters(): Promise<{ filters: MailFilter[] }> {
+  return apiFetch("/mail/filters");
+}
+
+export function createFilter(input: MailFilterInput) {
+  return apiFetch("/mail/filters", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateFilter(id: number, input: Partial<MailFilterInput>) {
+  return apiFetch(`/mail/filters/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteFilter(id: number) {
+  return apiFetch(`/mail/filters/${id}`, { method: "DELETE" });
 }
