@@ -51,9 +51,14 @@ services:
 
   # Next.js server: webmail + admin dashboard at /webmail, /admin, /api
   mail_justu_server:
-    image: kingeli/mail_justu_server:latest
+    image: kingeli/mail_justu_server:${APP_VERSION:?APP_VERSION must be set}
     container_name: mail_justu_server
     restart: unless-stopped
+    environment:
+      # read at request time by /api/ping
+      - APP_VERSION=${APP_VERSION}
+      # used by dns.ts to generate DNS-record suggestions in the admin UI
+      - MAIL_HOSTNAME=${MAIL_HOSTNAME}
     env_file:
       - ./.env/api.env
       - ./.env/server.env

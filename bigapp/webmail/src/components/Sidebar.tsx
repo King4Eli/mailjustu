@@ -62,6 +62,7 @@ interface SidebarProps {
   onSelectAlias: (source: string) => void;
   onRefresh: () => void;
   refreshing: boolean;
+  appVersion: string | null;
 }
 
 export function Sidebar({
@@ -82,6 +83,7 @@ export function Sidebar({
   onSelectAlias,
   onRefresh,
   refreshing,
+  appVersion,
 }: SidebarProps) {
   const [customFoldersOpen, setCustomFoldersOpen] = useState(false);
   const [aliasesFilterOpen, setAliasesFilterOpen] = useState(false);
@@ -402,6 +404,14 @@ export function Sidebar({
                   }}
                 />
               </div>
+            </div>
+          )}
+          {appVersion && (
+            <div
+              className="px-1 pt-2 text-center text-xs"
+              style={{ color: "var(--text-faint)" }}
+            >
+              v{appVersion}
             </div>
           )}
         </div>

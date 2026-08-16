@@ -146,6 +146,7 @@ export default function App() {
     usedBytes: number | null;
     quotaMb: number | null;
   } | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [listWidth, setListWidthState] = useState(() => getListWidth());
   const resizingRef = useRef(false);
   // null = haven't checked yet, so first load doesn't notify for the backlog.
@@ -399,6 +400,10 @@ export default function App() {
       api
         .getUsage()
         .then(setUsage)
+        .catch(() => {});
+      api
+        .getVersion()
+        .then((v) => setAppVersion(v.version))
         .catch(() => {});
       requestNotificationPermission();
     }
@@ -753,9 +758,7 @@ export default function App() {
           return action(id, folder);
         }),
       );
-      const failedIds = ids.filter(
-        (_, i) => results[i].status === "rejected",
-      );
+      const failedIds = ids.filter((_, i) => results[i].status === "rejected");
       if (failedIds.length > 0) {
         // Only the failed ones go back -- successes stay removed.
         const failedSet = new Set(failedIds);
@@ -1308,6 +1311,7 @@ export default function App() {
         }
         onRefresh={refreshAll}
         refreshing={refreshing || loading}
+        appVersion={appVersion}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

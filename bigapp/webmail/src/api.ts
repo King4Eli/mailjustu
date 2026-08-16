@@ -98,6 +98,12 @@ export function getUsage(): Promise<{
   return apiFetch("/mail/usage");
 }
 
+// Read fresh from the server on every call -- not baked into the build, so
+// one image can run as any version depending on how it's deployed.
+export function getVersion(): Promise<{ ok: boolean; version: string }> {
+  return apiFetch("/ping");
+}
+
 export function getFolders(): Promise<{ folders: ApiFolder[] }> {
   return apiFetch("/mail/folders");
 }
