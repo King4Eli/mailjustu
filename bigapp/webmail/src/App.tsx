@@ -647,27 +647,61 @@ export default function App() {
       (selectedMessage?.id === id ? selectedMessage : null);
     if (!message) return;
     const folder = message.sourceFolder || activeFolder;
-    const nextStarred = !message.starred;
+    const prevStarred = message.starred;
+    const nextStarred = !prevStarred;
+    const wasInStarredFolder = activeFolder === "STARRED";
+    // Optimistic: flip the star immediately, revert in the catch if the PATCH fails.
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, starred: nextStarred } : m)),
     );
-    if (selectedMessage?.id === id)
-      setSelectedMessage({ ...selectedMessage, starred: nextStarred });
+    setSelectedMessage((prev) =>
+      prev && prev.id === id ? { ...prev, starred: nextStarred } : prev,
+    );
     try {
       await api.setFlag(Number(id), folder, "starred", nextStarred);
-      if (activeFolder === "STARRED" && !nextStarred) {
+      if (wasInStarredFolder && !nextStarred) {
         setMessages((prev) => prev.filter((m) => m.id !== id));
       }
     } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, starred: prevStarred } : m)),
+      );
+      setSelectedMessage((prev) =>
+        prev && prev.id === id ? { ...prev, starred: prevStarred } : prev,
+      );
       push(err instanceof Error ? err.message : "Failed to update star");
     }
   }
 
-  function clearSelectionAndRemove(id: string) {
+  // Optimistically drops a message from the list/selection, then rolls the
+  // snapshot back and toasts if the underlying request fails.
+  async function optimisticRemove(
+    id: string,
+    action: () => Promise<unknown>,
+    failMessage: string,
+    successMessage?: string,
+  ) {
+    const prevMessages = messages;
+    const prevSelectedId = selectedId;
+    const prevSelectedMessage = selectedMessage;
+    const wasSelected = selectedId === id;
     setMessages((prev) => prev.filter((m) => m.id !== id));
-    setSelectedId(null);
-    setSelectedMessage(null);
-    loadFolders();
+    if (wasSelected) {
+      setSelectedId(null);
+      setSelectedMessage(null);
+    }
+    try {
+      await action();
+      loadFolders();
+      if (successMessage) push(successMessage, "success");
+    } catch (err) {
+      setMessages(prevMessages);
+      if (wasSelected) {
+        setSelectedId(prevSelectedId);
+        setSelectedMessage(prevSelectedMessage);
+      }
+      push(err instanceof Error ? err.message : failMessage);
+    }
   }
 
   function toggleMessageSelect(id: string) {
@@ -692,17 +726,6 @@ export default function App() {
     setSelectedIds(new Set());
   }
 
-  function removeMessagesFromList(ids: string[]) {
-    const idSet = new Set(ids);
-    setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
-    setSelectedIds(new Set());
-    if (selectedId && idSet.has(selectedId)) {
-      setSelectedId(null);
-      setSelectedMessage(null);
-    }
-    loadFolders();
-  }
-
   async function bulkAction(
     action: (id: string, folder: string) => Promise<unknown>,
     failMessage: string,
@@ -710,20 +733,50 @@ export default function App() {
   ) {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const prevMessages = messages;
+    const wasSelectionCleared = selectedId != null && idSet.has(selectedId);
+
+    // Optimistic: drop the whole selection from the list right away.
+    setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
+    setSelectedIds(new Set());
+    if (wasSelectionCleared) {
+      setSelectedId(null);
+      setSelectedMessage(null);
+    }
     setBulkBusy(true);
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         ids.map((id) => {
-          const message = messages.find((m) => m.id === id);
+          const message = prevMessages.find((m) => m.id === id);
           const folder = message?.sourceFolder || activeFolder;
           return action(id, folder);
         }),
       );
-      removeMessagesFromList(ids);
-      push(successMessage(ids.length), "success");
-    } catch (err) {
-      push(err instanceof Error ? err.message : failMessage);
+      const failedIds = ids.filter(
+        (_, i) => results[i].status === "rejected",
+      );
+      if (failedIds.length > 0) {
+        // Only the failed ones go back -- successes stay removed.
+        const failedSet = new Set(failedIds);
+        const restored = prevMessages.filter((m) => failedSet.has(m.id));
+        setMessages((prev) =>
+          [...prev, ...restored].sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+          ),
+        );
+        push(
+          failedIds.length === ids.length
+            ? failMessage
+            : `${failMessage} (${failedIds.length} of ${ids.length})`,
+        );
+      }
+      const succeeded = ids.length - failedIds.length;
+      if (succeeded > 0) {
+        push(successMessage(succeeded), "success");
+      }
     } finally {
+      loadFolders();
       setBulkBusy(false);
     }
   }
@@ -803,58 +856,53 @@ export default function App() {
   async function archiveMessage(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.moveMessage(Number(id), folder, "Archive");
-      clearSelectionAndRemove(id);
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to archive message");
-    }
+    await optimisticRemove(
+      id,
+      () => api.moveMessage(Number(id), folder, "Archive"),
+      "Failed to archive message",
+    );
   }
 
   async function snoozeMessage(id: string, wakeAt: Date) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.snoozeMessage(Number(id), folder, wakeAt);
-      clearSelectionAndRemove(id);
-      push(`Snoozed until ${wakeAt.toLocaleString()}`, "success");
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to snooze message");
-    }
+    await optimisticRemove(
+      id,
+      () => api.snoozeMessage(Number(id), folder, wakeAt),
+      "Failed to snooze message",
+      `Snoozed until ${wakeAt.toLocaleString()}`,
+    );
   }
 
   async function unsnoozeMessage(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.unsnoozeMessage(Number(id), folder);
-      clearSelectionAndRemove(id);
-      push("Un-snoozed", "success");
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to un-snooze message");
-    }
+    await optimisticRemove(
+      id,
+      () => api.unsnoozeMessage(Number(id), folder),
+      "Failed to un-snooze message",
+      "Un-snoozed",
+    );
   }
 
   async function markSpam(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.markAsSpam(Number(id), folder);
-      clearSelectionAndRemove(id);
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to mark as spam");
-    }
+    await optimisticRemove(
+      id,
+      () => api.markAsSpam(Number(id), folder),
+      "Failed to mark as spam",
+    );
   }
 
   async function markNotSpam(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.markAsNotSpam(Number(id), folder);
-      clearSelectionAndRemove(id);
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to mark as not spam");
-    }
+    await optimisticRemove(
+      id,
+      () => api.markAsNotSpam(Number(id), folder),
+      "Failed to mark as not spam",
+    );
   }
 
   // Attachments can come from any message in an expanded thread, not just the latest.
@@ -885,23 +933,21 @@ export default function App() {
   async function moveTo(id: string, target: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.moveMessage(Number(id), folder, target);
-      clearSelectionAndRemove(id);
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to move message");
-    }
+    await optimisticRemove(
+      id,
+      () => api.moveMessage(Number(id), folder, target),
+      "Failed to move message",
+    );
   }
 
   async function removeMessage(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
-    try {
-      await api.deleteMessage(Number(id), folder);
-      clearSelectionAndRemove(id);
-    } catch (err) {
-      push(err instanceof Error ? err.message : "Failed to delete message");
-    }
+    await optimisticRemove(
+      id,
+      () => api.deleteMessage(Number(id), folder),
+      "Failed to delete message",
+    );
   }
 
   async function createFolder(name: string) {
