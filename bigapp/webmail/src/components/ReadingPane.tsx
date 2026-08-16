@@ -52,7 +52,15 @@ function buildMailSrcDoc(html: string): string {
 function MailHtmlFrame({ html }: { html: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(160);
-  const srcDoc = useMemo(() => buildMailSrcDoc(html), [html]);
+  const docString = useMemo(() => buildMailSrcDoc(html), [html]);
+  const blobUrl = useMemo(() => {
+    const blob = new Blob([docString], { type: "text/html" });
+    return URL.createObjectURL(blob);
+  }, [docString]);
+
+  useEffect(() => {
+    return () => URL.revokeObjectURL(blobUrl);
+  }, [blobUrl]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -75,12 +83,12 @@ function MailHtmlFrame({ html }: { html: string }) {
       iframe.removeEventListener("load", measure);
       observer?.disconnect();
     };
-  }, [srcDoc]);
+  }, [blobUrl]);
 
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={srcDoc}
+      src={blobUrl}
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="no-referrer"
       title="Message content"
