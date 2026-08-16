@@ -5,7 +5,7 @@ services:
   mail_justu_postfix:
     image: boky/postfix
     container_name: mail_justu_postfix
-    hostname: ${MAIL_HOSTNAME}
+    hostname: ${MAIL_HOSTNAME:?MAIL_HOSTNAME must be set}
     restart: unless-stopped
     env_file:
       - ./.env/postfix.env
@@ -58,7 +58,7 @@ services:
       # read at request time by /api/ping
       - APP_VERSION=${APP_VERSION}
       # used by dns.ts to generate DNS-record suggestions in the admin UI
-      - MAIL_HOSTNAME=${MAIL_HOSTNAME}
+      - MAIL_HOSTNAME=${MAIL_HOSTNAME:?MAIL_HOSTNAME must be set}
     env_file:
       - ./.env/api.env
       - ./.env/server.env
