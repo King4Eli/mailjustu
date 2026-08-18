@@ -66,21 +66,39 @@ function MailHtmlFrame({ html }: { html: string }) {
     const iframe = iframeRef.current;
     if (!iframe) return;
     let observer: ResizeObserver | undefined;
-    function measure() {
-      const doc = iframe?.contentDocument;
-      if (!doc?.documentElement) return;
+    function attach(doc: Document) {
+      if (observer || !doc.documentElement) return;
       setHeight(doc.documentElement.scrollHeight);
-      // Remote images can grow the content after this first measurement.
-      if (!observer) {
-        observer = new ResizeObserver(() => {
-          if (doc.documentElement) setHeight(doc.documentElement.scrollHeight);
-        });
-        observer.observe(doc.documentElement);
-      }
+      // Remote images can grow the content well after the document itself
+      // is ready -- keep tracking so the pane grows as they come in.
+      observer = new ResizeObserver(() => {
+        if (doc.documentElement) setHeight(doc.documentElement.scrollHeight);
+      });
+      observer.observe(doc.documentElement);
     }
-    iframe.addEventListener("load", measure);
+    function onLoad() {
+      const doc = iframe?.contentDocument;
+      if (doc) attach(doc);
+    }
+    iframe.addEventListener("load", onLoad);
+
+    // The iframe's own "load" event waits on every embedded resource,
+    // including slow remote images -- that left the pane stuck at the
+    // previous message's height (or the 160px default) for however long
+    // the slowest image took. Poll for the document being parsed instead,
+    // so sizing starts as soon as the text is there and images just grow
+    // it further via the observer above.
+    const poll = window.setInterval(() => {
+      const doc = iframe?.contentDocument;
+      if (doc && doc.location.href === blobUrl && doc.readyState !== "loading") {
+        attach(doc);
+        window.clearInterval(poll);
+      }
+    }, 30);
+
     return () => {
-      iframe.removeEventListener("load", measure);
+      iframe.removeEventListener("load", onLoad);
+      window.clearInterval(poll);
       observer?.disconnect();
     };
   }, [blobUrl]);

@@ -310,13 +310,20 @@ export function sendMail(opts: SendMailOpts) {
   return apiFetch("/mail/send", { method: "POST", body: buildMailForm(opts) });
 }
 
-// Queues instead of sending immediately -- backs both Undo Send and Send later.
+// Queues instead of sending immediately -- backs both Undo Send and Send
+// later. Undo Send passes a relative delay so the server computes send_at
+// from its own clock; Send later passes an absolute Date since that's an
+// actual wall-clock choice the user made.
 export function scheduleSend(
   opts: SendMailOpts,
-  sendAt: Date,
+  when: Date | { delaySeconds: number },
 ): Promise<{ ok: boolean; id: number; sendAt: string }> {
   const form = buildMailForm(opts);
-  form.set("sendAt", sendAt.toISOString());
+  if (when instanceof Date) {
+    form.set("sendAt", when.toISOString());
+  } else {
+    form.set("delaySeconds", String(when.delaySeconds));
+  }
   return apiFetch("/mail/scheduled-sends", { method: "POST", body: form });
 }
 

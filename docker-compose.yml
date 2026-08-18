@@ -20,7 +20,6 @@ services:
       - "587:587"
     networks:
       - mail_justu_network
-      - shared-global-network
 
   # Serves stored mailboxes over IMAP, including encrypted IMAPS access.
   mail_justu_dovecot:
@@ -47,7 +46,6 @@ services:
       - "993:31993"
     networks:
       - mail_justu_network
-      - shared-global-network
 
   # Next.js server: webmail + admin dashboard at /webmail, /admin, /api
   mail_justu_server:
@@ -74,13 +72,10 @@ services:
       - "80"
     networks:
       - mail_justu_network
-      - shared-global-network
 
 networks:
   mail_justu_network:
     driver: bridge
-  shared-global-network:
-    external: true
 
 volumes:
   vmail_data:

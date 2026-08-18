@@ -1,6 +1,8 @@
-// Favicon unread badge + desktop notification, driven by Inbox unseen count.
+// Favicon unread badge + tab title + desktop notification, driven by Inbox
+// unseen count.
 const FAVICON_SIZE = 64;
 const BASE_FAVICON_HREF = "/webmail/favicon.svg";
+const BASE_TITLE = "Mailbox";
 
 let faviconLink: HTMLLinkElement | null = null;
 
@@ -48,6 +50,11 @@ export function updateFaviconBadge(count: number) {
     // leave whatever's already showing
   };
   img.src = BASE_FAVICON_HREF;
+}
+
+export function updateDocumentTitle(count: number) {
+  if (typeof document === "undefined") return;
+  document.title = count > 0 ? `(${count > 99 ? "99+" : count}) ${BASE_TITLE}` : BASE_TITLE;
 }
 
 export function requestNotificationPermission() {

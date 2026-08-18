@@ -24,6 +24,7 @@ import {
 import { buildInboxThreads } from "./utils";
 import {
   updateFaviconBadge,
+  updateDocumentTitle,
   requestNotificationPermission,
   notifyNewMail,
 } from "./notifications";
@@ -414,6 +415,7 @@ export default function App() {
   useEffect(() => {
     const inboxUnseen = folders.find((f) => f.icon === "\\Inbox")?.unseen ?? 0;
     updateFaviconBadge(inboxUnseen);
+    updateDocumentTitle(inboxUnseen);
     if (
       prevInboxUnseenRef.current != null &&
       inboxUnseen > prevInboxUnseenRef.current
@@ -1191,8 +1193,9 @@ export default function App() {
 
   async function handleSend(draft: ComposeDraft) {
     try {
-      const sendAt = new Date(Date.now() + UNDO_SEND_DELAY_SECONDS * 1000);
-      const { id } = await api.scheduleSend(draftToSendOpts(draft), sendAt);
+      const { id } = await api.scheduleSend(draftToSendOpts(draft), {
+        delaySeconds: UNDO_SEND_DELAY_SECONDS,
+      });
       await discardIfEditingDraft(draft);
       setComposeDraft(null);
       push(`Sending in ${UNDO_SEND_DELAY_SECONDS}s…`, "success", {

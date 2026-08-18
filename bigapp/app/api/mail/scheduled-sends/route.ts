@@ -38,11 +38,29 @@ export async function POST(req: NextRequest) {
     const inReplyTo = (form.get("inReplyTo") as string | null) || null;
     const referencesRaw = (form.get("references") as string | null) || "";
     const sendAtRaw = form.get("sendAt") as string | null;
+    const delaySecondsRaw = form.get("delaySeconds") as string | null;
     if (!to) return apiError(400, "to is required");
-    if (!sendAtRaw) return apiError(400, "sendAt is required");
-    const sendAt = new Date(sendAtRaw);
-    if (Number.isNaN(sendAt.getTime()))
-      return apiError(400, "sendAt is not a valid date");
+
+    // Undo Send: a relative delay, so send_at is computed from the
+    // server's own clock instead of trusting the client's -- a client with
+    // a skewed clock would otherwise silently queue the send far off from
+    // the real "N seconds from now" the user was told.
+    let sendAt: Date;
+    if (delaySecondsRaw != null) {
+      const delaySeconds = Number(delaySecondsRaw);
+      if (
+        !Number.isFinite(delaySeconds) ||
+        delaySeconds < 0 ||
+        delaySeconds > 300
+      )
+        return apiError(400, "delaySeconds is invalid");
+      sendAt = new Date(Date.now() + delaySeconds * 1000);
+    } else {
+      if (!sendAtRaw) return apiError(400, "sendAt is required");
+      sendAt = new Date(sendAtRaw);
+      if (Number.isNaN(sendAt.getTime()))
+        return apiError(400, "sendAt is not a valid date");
+    }
 
     let attachments;
     try {

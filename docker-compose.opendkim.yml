@@ -21,14 +21,10 @@ services:
     depends_on:
       mail_justu_opendkim:
         condition: service_started
-    networks:
-      - shared-global-network
 
 networks:
   mail_justu_network:
     driver: bridge
-  shared-global-network:
-    external: true
 volumes:
   opendkim_config:
     name: mail_justu_opendkim_config
