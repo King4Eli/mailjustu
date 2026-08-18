@@ -2,7 +2,6 @@ import { simpleParser } from "mailparser";
 import type { FetchMessageObject } from "imapflow";
 import { computeThreadId, normalizeReferences } from "./threading";
 
-// Shared by the messages list/search route and the snoozed-message route.
 export function cleanPreview(text: string | undefined) {
   if (!text) return "";
   return text.replace(/\s+/g, " ").trim().slice(0, 160);

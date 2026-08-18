@@ -58,9 +58,7 @@ export function FiltersModal({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const movableFolders = folders.filter(
-    (f) => f.id !== "STARRED" && f.id !== "SNOOZED",
-  );
+  const movableFolders = folders.filter((f) => f.id !== "STARRED");
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();

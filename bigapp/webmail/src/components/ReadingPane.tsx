@@ -15,9 +15,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
-  Clock,
   Ban,
-  UserCheck,
   Globe,
 } from "lucide-react";
 import type { EmailMessage, FolderInfo } from "../types";
@@ -247,33 +245,6 @@ function ThreadCard({
   );
 }
 
-function snoozeOptions(): { label: string; at: () => Date }[] {
-  return [
-    {
-      label: "Later today",
-      at: () => new Date(Date.now() + 3 * 60 * 60 * 1000),
-    },
-    {
-      label: "Tomorrow morning",
-      at: () => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        d.setHours(8, 0, 0, 0);
-        return d;
-      },
-    },
-    {
-      label: "Next week",
-      at: () => {
-        const d = new Date();
-        d.setDate(d.getDate() + 7);
-        d.setHours(8, 0, 0, 0);
-        return d;
-      },
-    },
-  ];
-}
-
 interface ReadingPaneProps {
   message: EmailMessage | null;
   folders: FolderInfo[];
@@ -284,12 +255,8 @@ interface ReadingPaneProps {
   onMarkNotSpam: (id: string) => void;
   onBlockSender: (message: EmailMessage) => void;
   onBlockDomain: (message: EmailMessage) => void;
-  onAllowSender: (message: EmailMessage) => void;
   isSpamFolder: boolean;
   onMoveTo: (id: string, path: string) => void;
-  onSnooze: (id: string, wakeAt: Date) => void;
-  isSnoozedFolder: boolean;
-  onUnsnooze: (id: string) => void;
   onDownloadAttachment: (
     messageId: string,
     attachmentIndex: number,
@@ -312,19 +279,13 @@ export function ReadingPane({
   onMarkNotSpam,
   onBlockSender,
   onBlockDomain,
-  onAllowSender,
   isSpamFolder,
   onMoveTo,
-  onSnooze,
-  isSnoozedFolder,
-  onUnsnooze,
   onDownloadAttachment,
   onReply,
   onBack,
 }: ReadingPaneProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [snoozeOpen, setSnoozeOpen] = useState(false);
-  const snoozeRef = useRef<HTMLDivElement>(null);
   const [blockMenuOpen, setBlockMenuOpen] = useState(false);
   const blockMenuRef = useRef<HTMLDivElement>(null);
 
@@ -333,16 +294,6 @@ export function ReadingPane({
       setExpandedIds(new Set([message.id]));
     }
   }, [message?.id, message?.threadMessages]);
-
-  useEffect(() => {
-    if (!snoozeOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (snoozeRef.current && !snoozeRef.current.contains(e.target as Node))
-        setSnoozeOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [snoozeOpen]);
 
   useEffect(() => {
     if (!blockMenuOpen) return;
@@ -373,9 +324,7 @@ export function ReadingPane({
     );
   }
 
-  const movableFolders = folders.filter(
-    (f) => f.id !== "STARRED" && f.id !== "SNOOZED",
-  );
+  const movableFolders = folders.filter((f) => f.id !== "STARRED");
   const thread =
     message.threadMessages && message.threadMessages.length > 1
       ? message.threadMessages
@@ -417,11 +366,6 @@ export function ReadingPane({
             onClick={() => onMarkSpam(message.id)}
           />
         )}
-        <ActionButton
-          icon={UserCheck}
-          label="Allow sender"
-          onClick={() => onAllowSender(message)}
-        />
         <div className="relative flex items-center" ref={blockMenuRef}>
           <ActionButton
             icon={Ban}
@@ -478,46 +422,6 @@ export function ReadingPane({
           label="Delete"
           onClick={() => onDelete(message.id)}
         />
-        <div className="relative flex items-center" ref={snoozeRef}>
-          <ActionButton
-            icon={Clock}
-            label={isSnoozedFolder ? "Un-snooze" : "Snooze"}
-            onClick={() =>
-              isSnoozedFolder
-                ? onUnsnooze(message.id)
-                : setSnoozeOpen((v) => !v)
-            }
-          />
-          {!isSnoozedFolder && snoozeOpen && (
-            <div
-              className="absolute left-0 top-full z-10 mt-1 w-44 rounded-xl border py-1 shadow-lg"
-              style={{
-                background: "var(--bg-elevated)",
-                borderColor: "var(--border)",
-              }}
-            >
-              {snoozeOptions().map((opt) => (
-                <button
-                  key={opt.label}
-                  onClick={() => {
-                    setSnoozeOpen(false);
-                    onSnooze(message.id, opt.at());
-                  }}
-                  className="block w-full px-3 py-2 text-left text-sm transition hover:opacity-80"
-                  style={{ color: "var(--text)" }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = "var(--bg-hover)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = "transparent")
-                  }
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
         <div className="relative flex items-center">
           <FolderInput
             size={15}

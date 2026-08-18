@@ -180,22 +180,14 @@ export default function App() {
         unseen: 0,
         messages: 0,
       };
-      const snoozed: FolderInfo = {
-        id: "SNOOZED",
-        name: "Snoozed",
-        icon: "snoozed",
-        unseen: 0,
-        messages: 0,
-      };
       const withPseudoFolders =
         inboxIndex >= 0
           ? [
               ...mapped.slice(0, inboxIndex + 1),
               starred,
-              snoozed,
               ...mapped.slice(inboxIndex + 1),
             ]
-          : [starred, snoozed, ...mapped];
+          : [starred, ...mapped];
       setFolders(withPseudoFolders);
     } catch (err) {
       push(err instanceof Error ? err.message : "Failed to load folders");
@@ -227,9 +219,7 @@ export default function App() {
       if (folderId === "STARRED") {
         // Aggregated across every folder's first page -- no pagination here.
         paginationRef.current = { mode: "none" };
-        const realFolders = folders.filter(
-          (f) => f.id !== "STARRED" && f.id !== "SNOOZED",
-        );
+        const realFolders = folders.filter((f) => f.id !== "STARRED");
         const results = await Promise.all(
           realFolders.map(async (f) => {
             const { messages: apiMessages } = await api.getMessages(f.id);
@@ -244,12 +234,6 @@ export default function App() {
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
           );
         setMessages(merged);
-      } else if (folderId === "SNOOZED") {
-        // Server-aggregated -- excluded from each folder's own listing.
-        paginationRef.current = { mode: "none" };
-        const { messages: apiMessages } = await api.getSnoozedMessages();
-        // Server sorts soonest-to-wake-first -- keep that order.
-        setMessages(apiMessages.map((m) => toEmailMessage(m, m.sourceFolder)));
       } else {
         const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
         const sentFolder = folders.find((f) => f.icon === "\\Sent");
@@ -355,7 +339,7 @@ export default function App() {
   async function silentRefresh() {
     if (!email || folders.length === 0 || loading || loadingMore || searching)
       return;
-    if (activeFolder === "STARRED" || activeFolder === "SNOOZED") return;
+    if (activeFolder === "STARRED") return;
     try {
       const inboxFolder = folders.find((f) => f.icon === "\\Inbox");
       const sentFolder = folders.find((f) => f.icon === "\\Sent");
@@ -545,7 +529,6 @@ export default function App() {
   const activeFolderIcon = folders.find((f) => f.id === activeFolder)?.icon;
   const canEmptyActiveFolder =
     activeFolderIcon === "\\Trash" || activeFolderIcon === "\\Junk";
-  const isSnoozedFolder = activeFolder === "SNOOZED";
 
   async function handleSelect(message: EmailMessage) {
     const folder = message.sourceFolder || activeFolder;
@@ -868,28 +851,6 @@ export default function App() {
     );
   }
 
-  async function snoozeMessage(id: string, wakeAt: Date) {
-    const message = messages.find((m) => m.id === id);
-    const folder = message?.sourceFolder || activeFolder;
-    await optimisticRemove(
-      id,
-      () => api.snoozeMessage(Number(id), folder, wakeAt),
-      "Failed to snooze message",
-      `Snoozed until ${wakeAt.toLocaleString()}`,
-    );
-  }
-
-  async function unsnoozeMessage(id: string) {
-    const message = messages.find((m) => m.id === id);
-    const folder = message?.sourceFolder || activeFolder;
-    await optimisticRemove(
-      id,
-      () => api.unsnoozeMessage(Number(id), folder),
-      "Failed to un-snooze message",
-      "Un-snoozed",
-    );
-  }
-
   async function markSpam(id: string) {
     const message = messages.find((m) => m.id === id);
     const folder = message?.sourceFolder || activeFolder;
@@ -1071,17 +1032,6 @@ export default function App() {
     });
   }
 
-  function allowSender(message: EmailMessage) {
-    const senderEmail = message.from.email;
-    if (!senderEmail) return;
-    quickSenderFilter({
-      value: senderEmail,
-      matchType: "equals",
-      action: "allow",
-      label: `Allowed ${senderEmail}`,
-    });
-  }
-
   // Same mail_filters mechanism as blockSender, pre-configured for the modal.
   async function addBlockedSender(
     value: string,
@@ -1166,10 +1116,6 @@ export default function App() {
     });
   }
 
-  // Undo Send is a very-short scheduled send, not a client-side setTimeout --
-  // it survives a closed tab, at the cost of one poll interval of latency.
-  const UNDO_SEND_DELAY_SECONDS = 10;
-
   function draftToSendOpts(draft: ComposeDraft): api.SendMailOpts {
     return {
       to: draft.to,
@@ -1193,29 +1139,12 @@ export default function App() {
 
   async function handleSend(draft: ComposeDraft) {
     try {
-      const { id } = await api.scheduleSend(draftToSendOpts(draft), {
-        delaySeconds: UNDO_SEND_DELAY_SECONDS,
-      });
+      await api.sendMail(draftToSendOpts(draft));
       await discardIfEditingDraft(draft);
       setComposeDraft(null);
-      push(`Sending in ${UNDO_SEND_DELAY_SECONDS}s…`, "success", {
-        actionLabel: "Undo",
-        durationMs: UNDO_SEND_DELAY_SECONDS * 1000 + 1000,
-        onAction: () => {
-          api.cancelScheduledSend(id).then(
-            () => push("Send canceled", "success"),
-            () => push("Too late to undo -- already sent", "error"),
-          );
-        },
-      });
-      // Actual send happens server-side once send_at passes -- refresh after.
-      window.setTimeout(
-        () => {
-          loadFolders();
-          loadMessages(activeFolder);
-        },
-        UNDO_SEND_DELAY_SECONDS * 1000 + 1500,
-      );
+      push("Message sent", "success");
+      loadFolders();
+      loadMessages(activeFolder);
     } catch (err) {
       push(err instanceof Error ? err.message : "Failed to send message");
     }
@@ -1389,12 +1318,8 @@ export default function App() {
               onMarkNotSpam={markNotSpam}
               onBlockSender={blockSender}
               onBlockDomain={blockDomain}
-              onAllowSender={allowSender}
               isSpamFolder={isSpamFolder}
               onMoveTo={moveTo}
-              onSnooze={snoozeMessage}
-              isSnoozedFolder={isSnoozedFolder}
-              onUnsnooze={unsnoozeMessage}
               onDownloadAttachment={downloadAttachment}
               onReply={handleReply}
               onBack={() => {

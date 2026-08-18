@@ -211,27 +211,6 @@ export function markAsNotSpam(uid: number, folder: string) {
   return moveMessage(uid, folder, "Inbox");
 }
 
-// Hides a message from its folder until wakeAt -- no move involved.
-export function snoozeMessage(uid: number, folder: string, wakeAt: Date) {
-  return apiFetch(
-    `/mail/messages/${uid}/snooze?folder=${encodeURIComponent(folder)}`,
-    { method: "POST", body: JSON.stringify({ wakeAt: wakeAt.toISOString() }) },
-  );
-}
-
-export function unsnoozeMessage(uid: number, folder: string) {
-  return apiFetch(
-    `/mail/messages/${uid}/snooze?folder=${encodeURIComponent(folder)}`,
-    { method: "DELETE" },
-  );
-}
-
-export function getSnoozedMessages(): Promise<{
-  messages: (ApiMessage & { sourceFolder: string; wakeAt: string })[];
-}> {
-  return apiFetch("/mail/snoozed");
-}
-
 export async function downloadAttachment(
   uid: number,
   folder: string,

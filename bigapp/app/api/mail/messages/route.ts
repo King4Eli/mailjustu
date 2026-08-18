@@ -2,12 +2,10 @@ import { NextRequest } from "next/server";
 import { withImap, resolveFolder } from "@/lib/api/imap";
 import { requireSession } from "@/lib/api/auth";
 import { apiError, withApiErrors } from "@/lib/api/handler";
-import { pool } from "@/lib/api/db";
 import {
   parseMessageSummary,
   MESSAGE_FETCH_QUERY,
 } from "@/lib/api/messageParsing";
-import type { RowDataPacket } from "mysql2";
 
 const LIST_LIMIT = Number(process.env.MESSAGE_LIST_PAGE_SIZE) || 30;
 const SEARCH_RESULT_LIMIT = Number(process.env.SEARCH_RESULT_LIMIT) || 100;
@@ -20,13 +18,6 @@ export async function GET(req: NextRequest) {
     // Sequence-number cursor for older pages; unused in search mode.
     const beforeParam = req.nextUrl.searchParams.get("before");
     const before = beforeParam ? Number(beforeParam) : null;
-
-    // Snoozed messages are hidden until they wake.
-    const [snoozedRows] = await pool.query<RowDataPacket[]>(
-      "SELECT uid FROM snoozed_messages WHERE mailbox_email = ? AND folder = ? AND wake_at > NOW()",
-      [email, folder],
-    );
-    const snoozedUids = new Set(snoozedRows.map((r) => r.uid as number));
 
     const result = await withImap(email, password, async (client) => {
       const mailbox = await client.mailboxOpen(folder);
@@ -59,7 +50,6 @@ export async function GET(req: NextRequest) {
         MESSAGE_FETCH_QUERY,
         useUid ? { uid: true } : undefined,
       )) {
-        if (snoozedUids.has(msg.uid)) continue;
         out.push(await parseMessageSummary(msg));
       }
       return { messages: out.reverse(), nextBefore };

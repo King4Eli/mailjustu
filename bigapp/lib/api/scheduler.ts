@@ -1,11 +1,10 @@
-// Two in-process pollers, started once from instrumentation.ts.
+// In-process poller, started once from instrumentation.ts.
 import { pool } from "./db";
 import { compileAndRelay } from "./mailSend";
 import type { RowDataPacket } from "mysql2";
 
 const SCHEDULED_SEND_POLL_MS =
   (Number(process.env.SCHEDULED_SEND_POLL_SECONDS) || 5) * 1000;
-const SNOOZE_POLL_MS = (Number(process.env.SNOOZE_POLL_SECONDS) || 60) * 1000;
 
 interface ScheduledSendRow extends RowDataPacket {
   id: number;
@@ -80,11 +79,6 @@ async function processDueScheduledSends() {
   }
 }
 
-// Snooze needs no background action -- this just prunes old rows.
-async function pruneWokenSnoozes() {
-  await pool.query("DELETE FROM snoozed_messages WHERE wake_at <= NOW()");
-}
-
 let started = false;
 
 export function startScheduler() {
@@ -95,9 +89,4 @@ export function startScheduler() {
       console.error("scheduled-send poll failed", err),
     );
   }, SCHEDULED_SEND_POLL_MS).unref();
-  setInterval(() => {
-    pruneWokenSnoozes().catch((err) =>
-      console.error("snooze prune failed", err),
-    );
-  }, SNOOZE_POLL_MS).unref();
 }

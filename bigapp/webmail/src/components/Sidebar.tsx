@@ -16,7 +16,6 @@ import {
   Folder,
   X,
   RefreshCw,
-  Clock,
   Filter,
   Ban,
 } from "lucide-react";
@@ -35,10 +34,9 @@ const ICONS: Record<
   "\\Trash": Trash2,
   "\\Archive": Archive,
   starred: Star,
-  snoozed: Clock,
 };
 
-const PSEUDO_FOLDER_IDS = new Set(["STARRED", "SNOOZED"]);
+const PSEUDO_FOLDER_IDS = new Set(["STARRED"]);
 
 function isCustomFolder(folder: FolderInfo) {
   return !PSEUDO_FOLDER_IDS.has(folder.id) && !ICONS[folder.icon];

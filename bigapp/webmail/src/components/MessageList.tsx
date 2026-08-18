@@ -299,7 +299,7 @@ export function MessageList({
                 Move to...
               </option>
               {folders
-                .filter((f) => f.id !== "STARRED" && f.id !== "SNOOZED")
+                .filter((f) => f.id !== "STARRED")
                 .map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
