@@ -765,6 +765,11 @@ export default function App() {
       }
     } finally {
       loadFolders();
+      // Refill the page from the server instead of leaving the list however
+      // many rows shorter the removal left it -- most noticeable after a
+      // large bulk delete. Skipped while searching so it doesn't blow away
+      // the current search results.
+      if (!searching) loadMessages(activeFolder);
       setBulkBusy(false);
     }
   }

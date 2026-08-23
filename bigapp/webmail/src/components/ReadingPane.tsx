@@ -48,8 +48,6 @@ function buildMailSrcDoc(html: string): string {
 }
 
 function MailHtmlFrame({ html }: { html: string }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(160);
   // srcDoc, not a blob: URL -- WebKit/mobile Safari has a longstanding bug
   // where blob: URLs loaded as a sandboxed iframe's src silently render
   // blank, which is exactly what showed up as an all-white message view on
@@ -57,60 +55,20 @@ function MailHtmlFrame({ html }: { html: string }) {
   // universally supported.
   const srcDoc = useMemo(() => buildMailSrcDoc(html), [html]);
 
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    // Snapshot the document that's showing *before* this srcDoc change
-    // navigates the iframe, so the polling below can tell the old message's
-    // document apart from the new one instead of measuring stale content.
-    const previousDoc = iframe.contentDocument;
-    let observer: ResizeObserver | undefined;
-    function attach(doc: Document) {
-      if (observer || !doc.documentElement) return;
-      setHeight(doc.documentElement.scrollHeight);
-      // Remote images can grow the content well after the document itself
-      // is ready -- keep tracking so the pane grows as they come in.
-      observer = new ResizeObserver(() => {
-        if (doc.documentElement) setHeight(doc.documentElement.scrollHeight);
-      });
-      observer.observe(doc.documentElement);
-    }
-    function onLoad() {
-      const doc = iframe?.contentDocument;
-      if (doc) attach(doc);
-    }
-    iframe.addEventListener("load", onLoad);
-
-    // The iframe's own "load" event waits on every embedded resource,
-    // including slow remote images -- that left the pane stuck at the
-    // previous message's height (or the 160px default) for however long
-    // the slowest image took. Poll for the document being parsed instead,
-    // so sizing starts as soon as the text is there and images just grow
-    // it further via the observer above.
-    const poll = window.setInterval(() => {
-      const doc = iframe?.contentDocument;
-      if (doc && doc !== previousDoc && doc.readyState !== "loading") {
-        attach(doc);
-        window.clearInterval(poll);
-      }
-    }, 30);
-
-    return () => {
-      iframe.removeEventListener("load", onLoad);
-      window.clearInterval(poll);
-      observer?.disconnect();
-    };
-  }, [srcDoc]);
-
   return (
     <iframe
-      ref={iframeRef}
       srcDoc={srcDoc}
-      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      // No allow-same-origin -- mail HTML is attacker-controlled, so the
+      // iframe gets a fully opaque, unique origin: no access to this app's
+      // cookies, storage, or DOM in either direction. The trade-off is we
+      // can no longer read the rendered content's height from here (that
+      // requires same-origin access), so this is a capped height with its
+      // own scrollbar instead of auto-growing to fit content.
+      sandbox="allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="no-referrer"
       title="Message content"
       className="mt-4 w-full border-0"
-      style={{ height }}
+      style={{ height: "70vh" }}
     />
   );
 }
