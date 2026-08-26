@@ -111,12 +111,12 @@ function AttachmentChips({
           style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
           title={`Download ${attachment.name}`}
         >
-          <Paperclip size={14} />
+          <Paperclip size={16} />
           <span className="font-medium" style={{ color: "var(--text)" }}>
             {attachment.name}
           </span>
           <span style={{ color: "var(--text-faint)" }}>{attachment.size}</span>
-          <Download size={13} />
+          <Download size={15} />
         </button>
       ))}
     </div>
@@ -149,13 +149,13 @@ function ThreadCard({
       >
         {expanded ? (
           <ChevronDown
-            size={14}
+            size={16}
             className="shrink-0"
             style={{ color: "var(--text-faint)" }}
           />
         ) : (
           <ChevronRight
-            size={14}
+            size={16}
             className="shrink-0"
             style={{ color: "var(--text-faint)" }}
           />
@@ -274,7 +274,7 @@ export function ReadingPane({
           className="flex h-16 w-16 items-center justify-center rounded-full"
           style={{ background: "var(--bg-hover)" }}
         >
-          <Mail size={28} style={{ color: "var(--text-faint)" }} />
+          <Mail size={30} style={{ color: "var(--text-faint)" }} />
         </div>
         <p className="text-sm" style={{ color: "var(--text-faint)" }}>
           Select a message to read
@@ -304,7 +304,7 @@ export function ReadingPane({
             className="mr-1 rounded-lg p-2 md:hidden"
             style={{ color: "var(--text-muted)" }}
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={20} />
           </button>
         )}
         <ActionButton
@@ -353,7 +353,7 @@ export function ReadingPane({
                   (e.currentTarget.style.background = "transparent")
                 }
               >
-                <Ban size={14} />
+                <Ban size={16} />
                 Block sender
               </button>
               <button
@@ -370,7 +370,7 @@ export function ReadingPane({
                   (e.currentTarget.style.background = "transparent")
                 }
               >
-                <Globe size={14} />
+                <Globe size={16} />
                 Block domain
               </button>
             </div>
@@ -383,7 +383,7 @@ export function ReadingPane({
         />
         <div className="relative flex items-center">
           <FolderInput
-            size={15}
+            size={17}
             className="pointer-events-none absolute left-2"
             style={{ color: "var(--text-muted)" }}
           />
@@ -442,7 +442,7 @@ export function ReadingPane({
               className="shrink-0 pt-1"
             >
               <Star
-                size={18}
+                size={20}
                 fill={message.starred ? "var(--accent)" : "none"}
                 style={{
                   color: message.starred
@@ -530,7 +530,7 @@ export function ReadingPane({
               className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition hover:opacity-80"
               style={{ borderColor: "var(--border)", color: "var(--text)" }}
             >
-              <Reply size={15} />
+              <Reply size={17} />
               Reply
             </button>
             <button
@@ -538,7 +538,7 @@ export function ReadingPane({
               className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition hover:opacity-80"
               style={{ borderColor: "var(--border)", color: "var(--text)" }}
             >
-              <Forward size={15} />
+              <Forward size={17} />
               Forward
             </button>
           </div>
@@ -568,7 +568,7 @@ function ActionButton({
       }
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <Icon size={17} />
+      <Icon size={19} />
     </button>
   );
 }

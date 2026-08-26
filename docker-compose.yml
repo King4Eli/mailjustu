@@ -49,7 +49,7 @@ services:
 
   # Next.js server: webmail + admin dashboard at /webmail, /admin, /api
   mail_justu_server:
-    image: kingeli/mail_justu_server:${APP_VERSION:?APP_VERSION must be set}
+    image: rg2.vintolab.com/mail_justu_server:${APP_VERSION:?APP_VERSION must be set}
     container_name: mail_justu_server
     restart: unless-stopped
     environment:

@@ -50,7 +50,7 @@ export function Login({ onLogin }: LoginProps) {
             className="flex h-9 w-9 items-center justify-center rounded-lg text-white"
             style={{ background: "var(--accent)" }}
           >
-            <Mail size={18} />
+            <Mail size={20} />
           </div>
           <span
             className="text-lg font-semibold"
@@ -108,7 +108,7 @@ export function Login({ onLogin }: LoginProps) {
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1"
             style={{ color: "var(--text-faint)" }}
           >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
 

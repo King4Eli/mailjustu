@@ -54,7 +54,8 @@ export function updateFaviconBadge(count: number) {
 
 export function updateDocumentTitle(count: number) {
   if (typeof document === "undefined") return;
-  document.title = count > 0 ? `(${count > 99 ? "99+" : count}) ${BASE_TITLE}` : BASE_TITLE;
+  document.title =
+    count > 0 ? `(${count > 99 ? "99+" : count}) ${BASE_TITLE}` : BASE_TITLE;
 }
 
 export function requestNotificationPermission() {

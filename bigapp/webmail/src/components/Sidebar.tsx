@@ -49,6 +49,9 @@ interface SidebarProps {
   onCompose: () => void;
   open: boolean;
   onClose: () => void;
+  // Desktop-only collapse state -- independent of `open`, which governs
+  // the mobile overlay drawer.
+  desktopOpen: boolean;
   onCreateFolder: (name: string) => void;
   onDeleteFolder: (path: string) => void;
   onOpenAliases: () => void;
@@ -70,6 +73,7 @@ export function Sidebar({
   onCompose,
   open,
   onClose,
+  desktopOpen,
   onCreateFolder,
   onDeleteFolder,
   onOpenAliases,
@@ -133,7 +137,7 @@ export function Sidebar({
               e.currentTarget.parentElement!.style.background = "transparent";
           }}
         >
-          <Icon size={17} />
+          <Icon size={19} />
           <span className="flex-1 truncate text-left">{folder.name}</span>
           {count > 0 && (
             <span
@@ -154,7 +158,7 @@ export function Sidebar({
             style={{ color: "var(--text-faint)" }}
             title={`Delete ${folder.name}`}
           >
-            <Trash2 size={13} />
+            <Trash2 size={15} />
           </button>
         )}
       </div>
@@ -173,8 +177,12 @@ export function Sidebar({
         />
       )}
       <aside
-        className={`fixed z-40 flex h-full w-64 flex-col gap-1 border-r p-3 transition-transform md:static md:translate-x-0 ${
+        className={`fixed z-40 flex h-full w-64 flex-col gap-1 overflow-hidden border-r p-3 transition-all md:static md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
+        } ${
+          desktopOpen
+            ? "md:w-64 md:p-3"
+            : "md:w-0 md:border-r-0 md:p-0 md:opacity-0"
         }`}
         style={{
           background: "var(--bg-elevated)",
@@ -186,7 +194,7 @@ export function Sidebar({
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white"
             style={{ background: "var(--accent)" }}
           >
-            <Mail size={18} />
+            <Mail size={20} />
           </div>
           <span
             className="text-lg font-semibold"
@@ -208,7 +216,7 @@ export function Sidebar({
               (e.currentTarget.style.background = "transparent")
             }
           >
-            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
           </button>
         </div>
 
@@ -217,7 +225,7 @@ export function Sidebar({
           className="mb-4 flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 active:scale-[0.98]"
           style={{ background: "var(--accent)" }}
         >
-          <Pencil size={16} />
+          <Pencil size={18} />
           Compose
         </button>
 
@@ -237,11 +245,11 @@ export function Sidebar({
               }
             >
               {customFoldersOpen ? (
-                <ChevronDown size={14} />
+                <ChevronDown size={16} />
               ) : (
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               )}
-              <Folder size={14} />
+              <Folder size={16} />
               <span className="flex-1 text-left">Folders</span>
               {customFolders.length > 0 && <span>{customFolders.length}</span>}
             </button>
@@ -257,7 +265,7 @@ export function Sidebar({
                 (e.currentTarget.style.background = "transparent")
               }
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </button>
           </div>
           {customFoldersOpen && (
@@ -287,11 +295,11 @@ export function Sidebar({
               }
             >
               {aliasesFilterOpen ? (
-                <ChevronDown size={14} />
+                <ChevronDown size={16} />
               ) : (
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               )}
-              <AtSign size={14} />
+              <AtSign size={16} />
               <span className="flex-1 text-left">Aliases</span>
               {aliases.length > 0 && <span>{aliases.length}</span>}
             </button>
@@ -307,7 +315,7 @@ export function Sidebar({
                 (e.currentTarget.style.background = "transparent")
               }
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </button>
           </div>
           {aliasesFilterOpen && (
@@ -343,7 +351,7 @@ export function Sidebar({
                     <span className="flex-1 truncate text-left">
                       {alias.source}
                     </span>
-                    {isActive && <X size={13} />}
+                    {isActive && <X size={15} />}
                   </button>
                 );
               })}
@@ -368,7 +376,7 @@ export function Sidebar({
             className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
             style={{ color: "var(--text-faint)" }}
           >
-            <Filter size={15} />
+            <Filter size={17} />
             <span>Mail filters</span>
           </button>
           <button
@@ -376,7 +384,7 @@ export function Sidebar({
             className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-xs"
             style={{ color: "var(--text-faint)" }}
           >
-            <Ban size={15} />
+            <Ban size={17} />
             <span>Allow &amp; block lists</span>
           </button>
           {usage?.usedBytes != null && (

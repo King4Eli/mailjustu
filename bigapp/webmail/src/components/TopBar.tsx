@@ -52,15 +52,16 @@ export function TopBar({
     >
       <button
         onClick={onToggleSidebar}
-        className="rounded-lg p-2 md:hidden"
+        title="Toggle sidebar"
+        className="rounded-lg p-2"
         style={{ color: "var(--text-muted)" }}
       >
-        <Menu size={20} />
+        <Menu size={22} />
       </button>
 
       <div className="relative flex-1">
         <Search
-          size={16}
+          size={18}
           className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
           style={{ color: "var(--text-faint)" }}
         />
@@ -77,7 +78,7 @@ export function TopBar({
             className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5"
             style={{ color: "var(--text-faint)" }}
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         )}
       </div>
@@ -92,7 +93,7 @@ export function TopBar({
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         title="Toggle theme"
       >
-        {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+        {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
       </button>
 
       <div className="relative shrink-0" ref={profileRef}>
@@ -117,7 +118,7 @@ export function TopBar({
           >
             {initials(email)}
           </div>
-          <ChevronDown size={14} style={{ color: "var(--text-faint)" }} />
+          <ChevronDown size={16} style={{ color: "var(--text-faint)" }} />
         </button>
 
         {profileOpen && (
@@ -152,7 +153,7 @@ export function TopBar({
                 }
                 onClick={() => setProfileOpen(false)}
               >
-                <ShieldCheck size={16} />
+                <ShieldCheck size={18} />
                 Open admin dashboard
               </a>
             )}
@@ -170,7 +171,7 @@ export function TopBar({
                 (e.currentTarget.style.background = "transparent")
               }
             >
-              <LogOut size={16} />
+              <LogOut size={18} />
               Sign out
             </button>
           </div>

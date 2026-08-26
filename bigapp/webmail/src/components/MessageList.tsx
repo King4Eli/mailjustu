@@ -95,7 +95,7 @@ function BulkButton({
       }}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <Icon size={15} />
+      <Icon size={17} />
     </button>
   );
 }
@@ -195,9 +195,9 @@ export function MessageList({
               style={{ color: "var(--text-faint)" }}
             >
               {busy ? (
-                <Loader2 size={13} className="animate-spin" />
+                <Loader2 size={15} className="animate-spin" />
               ) : (
-                <Trash2 size={13} />
+                <Trash2 size={15} />
               )}
               {busy ? "Emptying…" : "Empty"}
             </button>
@@ -217,7 +217,7 @@ export function MessageList({
             color: "var(--accent)",
           }}
         >
-          <AtSign size={13} className="shrink-0" />
+          <AtSign size={15} className="shrink-0" />
           <span className="flex-1 truncate">
             Only mail to {activeAliasFilter}
           </span>
@@ -226,7 +226,7 @@ export function MessageList({
             className="flex shrink-0 items-center gap-1 hover:opacity-80"
             title="Clear alias filter"
           >
-            <X size={13} />
+            <X size={15} />
           </button>
         </div>
       )}
@@ -241,7 +241,7 @@ export function MessageList({
         >
           {busy && (
             <Loader2
-              size={14}
+              size={16}
               className="shrink-0 animate-spin"
               style={{ color: "var(--accent)" }}
             />
@@ -281,7 +281,7 @@ export function MessageList({
           />
           <div className="relative flex items-center">
             <FolderInput
-              size={13}
+              size={15}
               className="pointer-events-none absolute left-2"
               style={{ color: "var(--accent)" }}
             />
@@ -446,7 +446,7 @@ export function MessageList({
                   </p>
                   {message.attachments && message.attachments.length > 0 && (
                     <Paperclip
-                      size={12}
+                      size={14}
                       className="shrink-0"
                       style={{ color: "var(--text-faint)" }}
                     />
@@ -469,7 +469,7 @@ export function MessageList({
                   }}
                 >
                   <Star
-                    size={15}
+                    size={17}
                     fill={message.starred ? "var(--accent)" : "none"}
                     style={{
                       color: message.starred
@@ -485,7 +485,7 @@ export function MessageList({
         {loadingMore && (
           <div className="flex items-center justify-center gap-2 py-4">
             <Loader2
-              size={16}
+              size={18}
               className="animate-spin"
               style={{ color: "var(--text-faint)" }}
             />

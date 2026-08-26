@@ -68,7 +68,7 @@ function AddressList({
         className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
         style={{ color: "var(--text-faint)" }}
       >
-        <Icon size={13} />
+        <Icon size={15} />
         {title}
       </h3>
       <form onSubmit={handleAdd} className="mb-2 flex flex-col gap-1.5">
@@ -92,7 +92,7 @@ function AddressList({
             className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             style={{ background: "var(--accent)" }}
           >
-            <Plus size={14} />
+            <Plus size={16} />
           </button>
         </div>
         <div className="flex gap-3 px-1">
@@ -106,7 +106,7 @@ function AddressList({
               onChange={() => setMatchType("equals")}
               style={{ accentColor: "var(--accent)" }}
             />
-            <AtSign size={12} />
+            <AtSign size={14} />
             Exact address
           </label>
           <label
@@ -119,7 +119,7 @@ function AddressList({
               onChange={() => setMatchType("domain")}
               style={{ accentColor: "var(--accent)" }}
             />
-            <Globe size={12} />
+            <Globe size={14} />
             Whole domain
           </label>
         </div>
@@ -137,9 +137,9 @@ function AddressList({
             style={{ background: "var(--bg-hover)", color: "var(--text)" }}
           >
             {f.match_type === "domain" ? (
-              <Globe size={12} style={{ color: "var(--text-faint)" }} />
+              <Globe size={14} style={{ color: "var(--text-faint)" }} />
             ) : (
-              <AtSign size={12} style={{ color: "var(--text-faint)" }} />
+              <AtSign size={14} style={{ color: "var(--text-faint)" }} />
             )}
             <span className="flex-1 truncate">
               {f.match_type === "domain" ? `*@${f.value}` : f.value}
@@ -148,7 +148,7 @@ function AddressList({
               onClick={() => onRemove(f.id)}
               style={{ color: "var(--text-faint)" }}
             >
-              <Trash2 size={14} />
+              <Trash2 size={16} />
             </button>
           </div>
         ))}
@@ -189,7 +189,7 @@ export function BlockListModal({
             Allow &amp; block lists
           </h2>
           <button onClick={onClose} style={{ color: "var(--text-faint)" }}>
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 

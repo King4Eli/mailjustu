@@ -101,7 +101,7 @@ function ToolbarButton({
       className="rounded p-1.5 transition hover:opacity-80"
       style={{ color: "var(--text-muted)" }}
     >
-      <Icon size={14} />
+      <Icon size={16} />
     </button>
   );
 }
@@ -421,7 +421,7 @@ export function ComposeModal({
             }}
             style={{ color: "var(--text-faint)" }}
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -451,7 +451,7 @@ export function ComposeModal({
             onClick={() => setMinimized(true)}
             className="rounded p-1 text-white/90 hover:bg-white/10"
           >
-            <Minus size={15} />
+            <Minus size={17} />
           </button>
           {!isMobile && (
             <button
@@ -459,14 +459,14 @@ export function ComposeModal({
               className="rounded p-1 text-white/90 hover:bg-white/10"
               title={full ? "Restore" : "Maximize"}
             >
-              {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
           )}
           <button
             onClick={handleCloseWithSave}
             className="rounded p-1 text-white/90 hover:bg-white/10"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -498,7 +498,7 @@ export function ComposeModal({
                 ))}
               </select>
               <ChevronDown
-                size={14}
+                size={16}
                 className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2"
                 style={{ color: "var(--text-faint)" }}
               />
@@ -607,9 +607,9 @@ export function ComposeModal({
               style={{ color: "var(--text-faint)" }}
             >
               {quoteExpanded ? (
-                <ChevronDown size={14} />
+                <ChevronDown size={16} />
               ) : (
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               )}
               <span>
                 {quoteExpanded ? "Hide quoted text" : "Show quoted text"}
@@ -656,7 +656,7 @@ export function ComposeModal({
                   color: "var(--text-muted)",
                 }}
               >
-                <FileIcon size={13} />
+                <FileIcon size={15} />
                 <span className="max-w-[140px] truncate">{file.name}</span>
                 <span style={{ color: "var(--text-faint)" }}>
                   {formatSize(file.size)}
@@ -665,7 +665,7 @@ export function ComposeModal({
                   onClick={() => removeFile(i)}
                   style={{ color: "var(--text-faint)" }}
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               </div>
             ))}
@@ -685,7 +685,7 @@ export function ComposeModal({
             style={{ background: "var(--accent)" }}
           >
             {sending ? "Sending…" : "Send"}
-            <Send size={14} />
+            <Send size={16} />
           </button>
           <div className="relative" ref={scheduleRef}>
             <button
@@ -698,7 +698,7 @@ export function ComposeModal({
                 borderLeft: "1px solid rgba(255,255,255,0.35)",
               }}
             >
-              <ChevronDown size={14} />
+              <ChevronDown size={16} />
             </button>
             {scheduleOpen && (
               <div
@@ -772,7 +772,7 @@ export function ComposeModal({
             className="rounded-lg p-2 hover:opacity-80"
             title="Attach files"
           >
-            <Paperclip size={17} />
+            <Paperclip size={19} />
           </button>
           <button
             onClick={onEditSignature}
@@ -780,7 +780,7 @@ export function ComposeModal({
             className="rounded-lg p-2 hover:opacity-80"
             title="Edit signature"
           >
-            <PenLine size={17} />
+            <PenLine size={19} />
           </button>
           {onDeleteDraft && draft.draftUid != null && (
             <button
@@ -790,7 +790,7 @@ export function ComposeModal({
               className="rounded-lg p-2 hover:opacity-80 disabled:opacity-60"
               title="Delete draft"
             >
-              <Trash2 size={17} />
+              <Trash2 size={19} />
             </button>
           )}
         </div>

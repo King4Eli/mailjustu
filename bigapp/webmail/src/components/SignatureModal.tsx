@@ -36,7 +36,7 @@ export function SignatureModal({
             Signature
           </h2>
           <button onClick={onClose} style={{ color: "var(--text-faint)" }}>
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 

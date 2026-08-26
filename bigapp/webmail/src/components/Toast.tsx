@@ -75,13 +75,13 @@ export function ToastStack({
         >
           {toast.type === "error" ? (
             <XCircle
-              size={16}
+              size={18}
               className="mt-0.5 shrink-0"
               style={{ color: "var(--danger)" }}
             />
           ) : (
             <CheckCircle2
-              size={16}
+              size={18}
               className="mt-0.5 shrink-0"
               style={{ color: "var(--accent)" }}
             />
@@ -103,7 +103,7 @@ export function ToastStack({
             onClick={() => onDismiss(toast.id)}
             style={{ color: "var(--text-faint)" }}
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
       ))}

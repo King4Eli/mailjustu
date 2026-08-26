@@ -107,7 +107,7 @@ export function FiltersModal({
             Mail filters
           </h2>
           <button onClick={onClose} style={{ color: "var(--text-faint)" }}>
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
@@ -224,7 +224,7 @@ export function FiltersModal({
             className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             style={{ background: "var(--accent)" }}
           >
-            <Plus size={15} />
+            <Plus size={17} />
             {busy ? "Saving…" : "Add rule"}
           </button>
         </form>
@@ -257,7 +257,7 @@ export function FiltersModal({
                 onClick={() => onDelete(f.id)}
                 style={{ color: "var(--text-faint)" }}
               >
-                <Trash2 size={14} />
+                <Trash2 size={16} />
               </button>
             </div>
           ))}

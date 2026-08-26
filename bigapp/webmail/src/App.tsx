@@ -132,7 +132,11 @@ export default function App() {
       ? "dark"
       : "light",
   );
+  // Mobile: an overlay drawer, closed by default. Desktop: a persistent,
+  // collapsible column, open by default -- separate booleans since the two
+  // layouts want opposite defaults, toggled together by the same button.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | null>(null);
   const [aliases, setAliases] = useState<ApiAlias[]>([]);
   const [aliasesOpen, setAliasesOpen] = useState(false);
@@ -158,6 +162,11 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   // True during any bulk/mass operation -- disables controls, shows a spinner.
   const [bulkBusy, setBulkBusy] = useState(false);
+  // IDs currently being removed from the active folder (deleted/archived/
+  // moved/etc.) but not yet confirmed gone server-side -- excluded from
+  // silentRefresh's merge so a poll that races the request can't resurrect
+  // them into the list while they're mid-flight.
+  const removingIdsRef = useRef<Set<string>>(new Set());
   // Pagination cursors, plus raw per-folder lists for the merged Inbox+Sent view.
   const paginationRef = useRef<{
     mode: "single" | "inbox" | "none";
@@ -348,12 +357,12 @@ export default function App() {
           api.getMessages(inboxFolder.id),
           api.getMessages(sentFolder.id),
         ]);
-        const freshInbox = inboxRes.messages.map((m) =>
-          toEmailMessage(m, inboxFolder.id),
-        );
-        const freshSent = sentRes.messages.map((m) =>
-          toEmailMessage(m, sentFolder.id),
-        );
+        const freshInbox = inboxRes.messages
+          .map((m) => toEmailMessage(m, inboxFolder.id))
+          .filter((m) => !removingIdsRef.current.has(m.id));
+        const freshSent = sentRes.messages
+          .map((m) => toEmailMessage(m, sentFolder.id))
+          .filter((m) => !removingIdsRef.current.has(m.id));
         const p = paginationRef.current;
         const mergedInbox = mergeById(p.inboxRaw || [], freshInbox);
         const mergedSent = mergeById(p.sentRaw || [], freshSent);
@@ -368,7 +377,9 @@ export default function App() {
         setMessages(buildInboxThreads(mergedInbox, mergedSent));
       } else {
         const { messages: apiMessages } = await api.getMessages(activeFolder);
-        const fresh = apiMessages.map((m) => toEmailMessage(m));
+        const fresh = apiMessages
+          .map((m) => toEmailMessage(m))
+          .filter((m) => !removingIdsRef.current.has(m.id));
         setMessages((prev) => mergeById(prev, fresh));
       }
       loadFolders();
@@ -412,7 +423,6 @@ export default function App() {
   // Drops to the Login screen the moment any request comes back 401.
   useEffect(() => {
     api.onSessionExpired(resetLocalSession);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -676,6 +686,7 @@ export default function App() {
     const prevSelectedMessage = selectedMessage;
     const wasSelected = selectedId === id;
     setMessages((prev) => prev.filter((m) => m.id !== id));
+    removingIdsRef.current.add(id);
     if (wasSelected) {
       setSelectedId(null);
       setSelectedMessage(null);
@@ -691,6 +702,8 @@ export default function App() {
         setSelectedMessage(prevSelectedMessage);
       }
       push(err instanceof Error ? err.message : failMessage);
+    } finally {
+      removingIdsRef.current.delete(id);
     }
   }
 
@@ -729,6 +742,7 @@ export default function App() {
 
     // Optimistic: drop the whole selection from the list right away.
     setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
+    for (const id of ids) removingIdsRef.current.add(id);
     setSelectedIds(new Set());
     if (wasSelectionCleared) {
       setSelectedId(null);
@@ -764,6 +778,7 @@ export default function App() {
         push(successMessage(succeeded), "success");
       }
     } finally {
+      for (const id of ids) removingIdsRef.current.delete(id);
       loadFolders();
       // Refill the page from the server instead of leaving the list however
       // many rows shorter the removal left it -- most noticeable after a
@@ -1235,6 +1250,7 @@ export default function App() {
         }
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        desktopOpen={desktopSidebarOpen}
         onCreateFolder={createFolder}
         onDeleteFolder={deleteFolder}
         onOpenAliases={() => setAliasesOpen(true)}
@@ -1261,7 +1277,10 @@ export default function App() {
             setTheme(next);
             document.documentElement.setAttribute("data-theme", next);
           }}
-          onToggleSidebar={() => setSidebarOpen(true)}
+          onToggleSidebar={() => {
+            setSidebarOpen((v) => !v);
+            setDesktopSidebarOpen((v) => !v);
+          }}
           email={email}
           adminUrl={role !== "user" ? "/admin" : undefined}
           onLogout={handleLogout}
