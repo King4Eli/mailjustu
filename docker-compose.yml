@@ -8,7 +8,7 @@ services:
     hostname: ${MAIL_HOSTNAME:?MAIL_HOSTNAME must be set}
     restart: unless-stopped
     env_file:
-      - ./.env/postfix.env
+      - ./env/postfix.env
     volumes:
       - postfix_config:/etc/postfix
       - var_mail:/var/mail
@@ -27,9 +27,9 @@ services:
     container_name: mail_justu_dovecot
     restart: unless-stopped
     env_file:
-      - ./.env/dovecot.env
+      - ./env/dovecot.env
       # DB_* only, for auth.conf's SQL passdb/userdb (virtual_users lookup)
-      - ./.env/api.env
+      - ./env/api.env
     # Named volumes throughout, no host bind mounts -- see
     # mail_justu_postfix above. vmail_data is the actual mailbox storage
     # (Dovecot's mail_home is /srv/vmail/%{user}, NOT /var/mail).
@@ -58,11 +58,11 @@ services:
       # used by dns.ts to generate DNS-record suggestions in the admin UI
       - MAIL_HOSTNAME=${MAIL_HOSTNAME:?MAIL_HOSTNAME must be set}
     env_file:
-      - ./.env/api.env
-      - ./.env/server.env
+      - ./env/api.env
+      - ./env/server.env
       # DOVEADM_PASSWORD only -- loaded straight from dovecot's own env
       # file so there's exactly one copy, not a second one to keep in sync.
-      - ./.env/dovecot.env
+      - ./env/dovecot.env
     depends_on:
       mail_justu_postfix:
         condition: service_started

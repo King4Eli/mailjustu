@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
     pid: service:mail_justu_opendkim
     env_file:
-      - ./.env/api.env
+      - ./env/api.env
     volumes:
       - opendkim_config:/etc/opendkim
     depends_on:
