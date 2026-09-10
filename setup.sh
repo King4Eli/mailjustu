@@ -74,9 +74,7 @@ confirm "Have you personalized env/*.env for this server (domain, hostname, admi
 
 setup_server_mysql
 
-# ${MAIL_HOSTNAME}/${APP_VERSION} resolve from the root .env file, which
-# `docker compose` auto-loads from the project dir. Per-service process
-# env lives in ./env/*.env (loaded via each service's env_file:).
+# ${MAIL_HOSTNAME}/${APP_VERSION} <- root .env (auto-loaded by compose)
 COMPOSE_FILES=(-f docker-compose.yml)
 [[ "$MODE" == dev ]] && COMPOSE_FILES+=(-f docker-compose.override.yml)
 $WITH_RSPAMD   && COMPOSE_FILES+=(-f docker-compose.rspamd.yml)

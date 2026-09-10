@@ -68,13 +68,11 @@ their own domain.
 
 ## Environment
 
-Each component's config lives in its own file under `./env/`
-(`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `server.env`, ...),
-loaded into containers via `env_file:`. The root `.env` is separate and
-tiny -- just `MAIL_HOSTNAME` and `APP_VERSION`, which `docker compose`
-auto-loads for `${...}` interpolation. Update the passwords before any
-real deployment -- checked-in values are placeholders. Full variable list
-per file: [`_docs/SETUP.md`](./_docs/SETUP.md#environment-files-env).
+Per-component config under `./env/` (`postfix.env`, `dovecot.env`,
+`rspamd.env`, `api.env`, `server.env`, ...), loaded via `env_file:`.
+Root `.env` is separate: just `MAIL_HOSTNAME` + `APP_VERSION`, auto-loaded
+for `${...}` interpolation. Rotate passwords before real use -- checked-in
+values are placeholders. Full list: [`_docs/SETUP.md`](./_docs/SETUP.md#environment-files-env).
 
 ## Frontends + API
 

@@ -2,11 +2,9 @@
 
 ## Compose file layout
 
-One base file plus opt-in overlays, layered with `-f`. The root `.env`
-holds just the two interpolation vars (`MAIL_HOSTNAME`, `APP_VERSION`) and
-is auto-loaded by `docker compose` -- no `--env-file` flag needed.
-Per-service process env lives in `./env/*.env`, one file per service,
-loaded via each service's `env_file:`.
+Base file + opt-in overlays, layered with `-f`. Root `.env` (interpolation
+vars `MAIL_HOSTNAME`, `APP_VERSION`) is auto-loaded -- no `--env-file`.
+Per-service process env: `./env/*.env`, one per service, via `env_file:`.
 
 | File | Adds | Required? |
 | --- | --- | --- |
@@ -87,16 +85,12 @@ docker compose \
   up -d
 ```
 
-The root `.env` is picked up automatically. `docker compose up -d` with
-no flags brings up the base stack plus the auto-loaded dev override.
-Drop `docker-compose.override.yml` and any overlays you don't want. For
-production, supply your own compose file instead of the dev override
-(host bind mounts, `:4001` publish) -- `docker compose -f
-docker-compose.yml -f docker-compose.<yours>.yml up -d`.
-If you go this route by hand rather than via `setup.sh`, you still need
-to run the provisioning steps above once after first boot (each
-`setup/*-setup.sh` is runnable standalone, e.g. `source
-setup/dovecot-setup.sh && provision_dovecot_auth`).
+Root `.env` auto-loaded. Bare `docker compose up -d` = base + dev override.
+Drop overlays you don't want. Prod: swap the override for your own file --
+`docker compose -f docker-compose.yml -f docker-compose.<yours>.yml up -d`.
+By hand (not via `setup.sh`): still run the provisioning steps above once
+after first boot -- each `setup/*-setup.sh` runs standalone, e.g. `source
+setup/dovecot-setup.sh && provision_dovecot_auth`.
 
 ## Ports
 
@@ -118,11 +112,10 @@ Each is `env_file:`-loaded into whichever container(s) need it (see
 `docker-compose.yml`); nothing here is baked into the image at build
 time except where noted.
 
-The **root `.env`** is separate -- `docker compose` auto-loads it for
-`${...}` interpolation only (it is *not* an `env_file:` and is not
-injected into any container). It holds `MAIL_HOSTNAME` (Postfix's
-`hostname:` + the server's DNS-record generator, echoed into the server
-via `environment:`) and `APP_VERSION` (the server image tag).
+Root `.env` is separate -- auto-loaded for `${...}` interpolation only,
+never an `env_file:`, never injected. Holds `MAIL_HOSTNAME` (Postfix
+`hostname:` + server DNS-record gen, re-exported via `environment:`) and
+`APP_VERSION` (server image tag).
 
 - **`api.env`** -- the big one, loaded into `mail_justu_server` (and
   partially into `mail_justu_dovecot`, for the DB passdb lookup):
@@ -138,8 +131,8 @@ via `environment:`) and `APP_VERSION` (the server image tag).
   `lib/api/rateLimit.ts`); `MESSAGE_LIST_PAGE_SIZE`;
   `MAX_MAILBOXES_PER_DOMAIN`/`MAX_ALIASES_PER_MAILBOX`/`MAX_FOLDERS_PER_MAILBOX`;
   `MAX_ATTACHMENTS_PER_MESSAGE`/`MAX_ATTACHMENT_SIZE_MB`;
-  `DEFAULT_MAILBOX_QUOTA_MB`; `MAIL_PUBLIC_IP` (generated DNS records --
-  note `MAIL_HOSTNAME` is in the root `.env`, not here);
+  `DEFAULT_MAILBOX_QUOTA_MB`; `MAIL_PUBLIC_IP` (DNS records -- but
+  `MAIL_HOSTNAME` is in root `.env`);
   `SCHEDULED_SEND_POLL_SECONDS`/`SNOOZE_POLL_SECONDS` (background pollers,
   see `lib/api/scheduler.ts`).
 - **`dovecot.env`** -- `DOVEADM_PASSWORD`, shared into `mail_justu_server`
