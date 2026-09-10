@@ -7,7 +7,7 @@ logged in the same way as any webmail user: real IMAP auth via
 time in `bigapp/lib/api/auth.ts`, not stored anywhere else:
 
 ```
-role = 'super'   if email is in SUPER_ADMIN_EMAILS (./.env/api.env)
+role = 'super'   if email is in SUPER_ADMIN_EMAILS (./env/api.env)
 role = 'domain'  else if virtual_users.is_admin = TRUE for that email
 role = 'user'    otherwise
 ```
@@ -20,7 +20,7 @@ in-memory session created at login and re-checked on every
 
 | Role | How it's granted | Scope |
 | --- | --- | --- |
-| **super** | Email listed in `SUPER_ADMIN_EMAILS` (`./.env/api.env`, comma-separated) | Every domain, mailbox, alias; also Services/health/stats and domain create/delete |
+| **super** | Email listed in `SUPER_ADMIN_EMAILS` (`./env/api.env`, comma-separated) | Every domain, mailbox, alias; also Services/health/stats and domain create/delete |
 | **domain** | `virtual_users.is_admin = TRUE`, set by a super admin (or the bootstrap script below) | Mailboxes/aliases/limits for their own domain only; never sees Services/health/stats |
 | **user** | Default for any mailbox | Webmail only (`/webmail`), no `/api/admin/*` access |
 
@@ -35,7 +35,7 @@ created directly against the database, from the host.
 **Option A -- `./setup.sh --bootstrap-admin`**
 
 Runs automatically after `docker compose up` if you pass the flag; reads
-`SUPER_ADMIN_EMAILS` / `SUPER_ADMIN_PASSWORD` out of `./.env/api.env` and
+`SUPER_ADMIN_EMAILS` / `SUPER_ADMIN_PASSWORD` out of `./env/api.env` and
 calls the same script as Option B. Only really works for a single admin
 email (it uses the first/only value you put in those two vars).
 
@@ -60,17 +60,17 @@ This alone makes the account a **domain admin** for whatever domain is in
 the email. To get **super admin**:
 
 ```bash
-# ./.env/api.env
+# ./env/api.env
 SUPER_ADMIN_EMAILS=admin@mail.example.com
 ```
 
 then recreate the container so it picks up the new env value -- the
 super-admin check is `SUPER_ADMIN_EMAILS` read live from env, not a DB
-column, so editing `.env/api.env` alone doesn't take effect until the
+column, so editing `env/api.env` alone doesn't take effect until the
 container restarts:
 
 ```bash
-docker compose --env-file .env/api.env up -d --force-recreate mail_justu_server
+docker compose up -d --force-recreate mail_justu_server
 ```
 
 (Add `-f docker-compose.override.yml` etc. to match however you normally
@@ -101,7 +101,7 @@ To demote, do the reverse (`is_admin = FALSE` and/or remove from
 
 - `SUPER_ADMIN_EMAILS` is a flat comma-separated list -- no UI manages it,
   it's a manual env edit + container recreate every time.
-- Session TTL (`SESSION_TTL_MINUTES` in `./.env/api.env`, default 120) is
+- Session TTL (`SESSION_TTL_MINUTES` in `./env/api.env`, default 120) is
   the same for every role -- an idle super-admin session expires just
   like a webmail one.
 - Deleting the last super admin's `SUPER_ADMIN_EMAILS` entry doesn't

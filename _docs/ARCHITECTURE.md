@@ -91,7 +91,7 @@ Session = { email, password, role: 'super'|'domain'|'user', domain, expires }
 The plaintext password is kept in the session (needed to open per-request
 IMAP/SMTP connections *as that user* -- there's no service account) but
 never sent back to the browser after login; the browser only holds the
-opaque bearer token. `SESSION_TTL_MINUTES` (`./.env/api.env`, default
+opaque bearer token. `SESSION_TTL_MINUTES` (`./env/api.env`, default
 120) controls both the initial expiry and the sliding-window renewal on
 each authenticated request; a background `setInterval` sweeps expired
 entries every 60s.

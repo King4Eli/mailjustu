@@ -2,10 +2,11 @@
 
 ## Compose file layout
 
-One base file plus opt-in overlays, layered with `-f`. None of them
-declare a root `.env` -- config lives in `./.env/*.env`, one file per
-service, and `--env-file .env/api.env` must be passed explicitly on every
-`docker compose` invocation so `${MAIL_HOSTNAME}` etc. resolve.
+One base file plus opt-in overlays, layered with `-f`. The root `.env`
+holds just the two interpolation vars (`MAIL_HOSTNAME`, `APP_VERSION`) and
+is auto-loaded by `docker compose` -- no `--env-file` flag needed.
+Per-service process env lives in `./env/*.env`, one file per service,
+loaded via each service's `env_file:`.
 
 | File | Adds | Required? |
 | --- | --- | --- |
@@ -42,13 +43,13 @@ What it does, in order (each step also lives in its own
 1. **`network-setup.sh`** -- checks/creates `shared-global-network`.
 2. **`postfix-setup.sh` / `dovecot-setup.sh` / `rspamd-setup.sh` /
    `server-setup.sh`** -- `require_env` checks that the relevant
-   `.env/*.env` files exist. These only *verify*, never write one --
+   `env/*.env` files exist. These only *verify*, never write one --
    missing a file is a hard stop ("add it before running setup.sh").
-3. Prompts you to confirm `.env/*.env` has been personalized (domain,
+3. Prompts you to confirm `env/*.env` has been personalized (domain,
    hostname, admin, secrets) before continuing.
 4. **`server-setup.sh`**'s `setup_server_mysql` -- checks `global_mysql`
    is reachable with the `DB_USER`/`DB_PASSWORD`/`DB_NAME` from
-   `.env/api.env`. Warns (doesn't fail) if not -- `global_mysql` is
+   `env/api.env`. Warns (doesn't fail) if not -- `global_mysql` is
    external to this project.
 5. `docker compose <selected files> up -d`.
 6. **Provisioning steps that must run *after* first boot** (the named
@@ -58,7 +59,7 @@ What it does, in order (each step also lives in its own
      `dovecot_config` (without it, IMAP login never works at all), then
      restarts Dovecot.
    - `provision_postfix_maps` -- renders the `mysql-virtual-*.cf` map
-     files (envsubst'd from `.env/api.env`'s `DB_*`) into
+     files (envsubst'd from `env/api.env`'s `DB_*`) into
      `postfix_config`, then restarts Postfix.
    - `provision_clamav_milter` (if `--no-clamav` wasn't passed) -- fixes
      `clamd/clamav-milter`'s default config (wrong socket path, and a
@@ -66,7 +67,7 @@ What it does, in order (each step also lives in its own
      container the instant the milter daemonizes), then restarts it.
 7. Waits up to 90s for containers to leave `starting`/`unhealthy`.
 8. If `--bootstrap-admin`: runs `bootstrap-admin.js` with
-   `SUPER_ADMIN_EMAILS`/`SUPER_ADMIN_PASSWORD` from `.env/api.env` -- see
+   `SUPER_ADMIN_EMAILS`/`SUPER_ADMIN_PASSWORD` from `env/api.env` -- see
    [ADMIN.md](./ADMIN.md).
 
 None of the provisioning steps are idempotent-guarded against re-running
@@ -78,7 +79,6 @@ only rewrites its file on an actual password mismatch.
 
 ```bash
 docker compose \
-  --env-file .env/api.env \
   -f docker-compose.yml \
   -f docker-compose.override.yml \
   -f docker-compose.rspamd.yml \
@@ -87,10 +87,12 @@ docker compose \
   up -d
 ```
 
+The root `.env` is picked up automatically. `docker compose up -d` with
+no flags brings up the base stack plus the auto-loaded dev override.
 Drop `docker-compose.override.yml` and any overlays you don't want. For
 production, supply your own compose file instead of the dev override
-(host bind mounts, `:4001` publish) -- `docker compose --env-file
-.env/api.env -f docker-compose.yml -f docker-compose.<yours>.yml up -d`.
+(host bind mounts, `:4001` publish) -- `docker compose -f
+docker-compose.yml -f docker-compose.<yours>.yml up -d`.
 If you go this route by hand rather than via `setup.sh`, you still need
 to run the provisioning steps above once after first boot (each
 `setup/*-setup.sh` is runnable standalone, e.g. `source
@@ -110,11 +112,17 @@ In prod mode (no override), bigapp is otherwise internal-only
 (`mail_justu_server:80` inside `shared-global-network`) -- put a reverse
 proxy in front rather than exposing 1180/4001 directly.
 
-## Environment files (`./.env/`)
+## Environment files (`./env/`)
 
 Each is `env_file:`-loaded into whichever container(s) need it (see
 `docker-compose.yml`); nothing here is baked into the image at build
 time except where noted.
+
+The **root `.env`** is separate -- `docker compose` auto-loads it for
+`${...}` interpolation only (it is *not* an `env_file:` and is not
+injected into any container). It holds `MAIL_HOSTNAME` (Postfix's
+`hostname:` + the server's DNS-record generator, echoed into the server
+via `environment:`) and `APP_VERSION` (the server image tag).
 
 - **`api.env`** -- the big one, loaded into `mail_justu_server` (and
   partially into `mail_justu_dovecot`, for the DB passdb lookup):
@@ -130,8 +138,8 @@ time except where noted.
   `lib/api/rateLimit.ts`); `MESSAGE_LIST_PAGE_SIZE`;
   `MAX_MAILBOXES_PER_DOMAIN`/`MAX_ALIASES_PER_MAILBOX`/`MAX_FOLDERS_PER_MAILBOX`;
   `MAX_ATTACHMENTS_PER_MESSAGE`/`MAX_ATTACHMENT_SIZE_MB`;
-  `DEFAULT_MAILBOX_QUOTA_MB`; `MAIL_HOSTNAME`/`MAIL_PUBLIC_IP` (also used
-  by `docker-compose.yml` itself, e.g. Postfix's `hostname:`);
+  `DEFAULT_MAILBOX_QUOTA_MB`; `MAIL_PUBLIC_IP` (generated DNS records --
+  note `MAIL_HOSTNAME` is in the root `.env`, not here);
   `SCHEDULED_SEND_POLL_SECONDS`/`SNOOZE_POLL_SECONDS` (background pollers,
   see `lib/api/scheduler.ts`).
 - **`dovecot.env`** -- `DOVEADM_PASSWORD`, shared into `mail_justu_server`
@@ -143,7 +151,7 @@ time except where noted.
   on every request (not build-time) -- change it and restart the
   container, no rebuild required.
 
-`.env/deploy.json` also exists but isn't one of the `env_file:`s consumed
+`env/deploy.json` also exists but isn't one of the `env_file:`s consumed
 by compose -- check it separately if you're touching the deploy tooling
 in `deploy.sh`.
 
@@ -161,22 +169,22 @@ first boot, e.g.:
 
 ```bash
 docker exec -i global_mysql mysql \
-  -u "$(grep ^DB_USER .env/api.env | cut -d= -f2)" \
-  -p"$(grep ^DB_PASSWORD .env/api.env | cut -d= -f2)" \
-  "$(grep ^DB_NAME .env/api.env | cut -d= -f2)" < _docs/schema.sql
+  -u "$(grep ^DB_USER env/api.env | cut -d= -f2)" \
+  -p"$(grep ^DB_PASSWORD env/api.env | cut -d= -f2)" \
+  "$(grep ^DB_NAME env/api.env | cut -d= -f2)" < _docs/schema.sql
 ```
 
 ### Backup / restore
 
 ```bash
 docker exec global_mysql mysqldump \
-  -u "$(grep ^DB_USER .env/api.env | cut -d= -f2)" \
-  -p"$(grep ^DB_PASSWORD .env/api.env | cut -d= -f2)" \
-  --databases "$(grep ^DB_NAME .env/api.env | cut -d= -f2)" --routines --triggers > dump.sql
+  -u "$(grep ^DB_USER env/api.env | cut -d= -f2)" \
+  -p"$(grep ^DB_PASSWORD env/api.env | cut -d= -f2)" \
+  --databases "$(grep ^DB_NAME env/api.env | cut -d= -f2)" --routines --triggers > dump.sql
 ```
 
 Contains bcrypt password hashes, not plaintext -- still treat it as a
-secret, same as `.env/`.
+secret, same as `env/`.
 
 ## Known gaps
 

@@ -39,7 +39,7 @@ ExternalIgnoreList      ${CONF_DIR}/TrustedHosts
   // "mail_justu_server.mail_justu_mail_justu_network", the Docker
   // DNS name, not the bare hostname, so a literal "mail_justu_server"
   // entry never matches. Same RFC1918 ranges as MYNETWORKS in
-  // .env/postfix.env -- covers any Docker bridge subnet regardless of
+  // env/postfix.env -- covers any Docker bridge subnet regardless of
   // which /16 it's actually allocated.
   fs.writeFileSync(
     path.join(CONF_DIR, 'TrustedHosts'),

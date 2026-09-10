@@ -17,4 +17,4 @@ npm run dev
 ```
 
 Configuration (dev/preview ports, where to find the API) is loaded from
-`../.env/webui.env`.
+`../env/webui.env`.

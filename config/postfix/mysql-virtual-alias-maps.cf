@@ -1,5 +1,5 @@
 # Provisioned into the postfix_config volume by setup/postfix-setup.sh,
-# which substitutes ${DB_*} from ./.env/api.env (Postfix mysql maps don't
+# which substitutes ${DB_*} from ./env/api.env (Postfix mysql maps don't
 # support %{env:...} expansion themselves, so this happens before writing).
 hosts = ${DB_HOST}
 user = ${DB_USER}

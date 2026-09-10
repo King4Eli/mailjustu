@@ -7,7 +7,7 @@ import AdminPageClient from "./AdminPageClient";
 export const dynamic = "force-dynamic";
 
 // A real Server Component: this reads live container env vars on every
-// request, no build/bake step involved -- change .env/api.env and
+// request, no build/bake step involved -- change env/api.env and
 // restart the container, no rebuild needed.
 export default function AdminPage() {
   const title = process.env.ADMIN_TITLE || "Postmaster";

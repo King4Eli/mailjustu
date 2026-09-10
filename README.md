@@ -59,7 +59,7 @@ lets them send *as* the alias. Aliases must be on the user's own domain
 
 The admin dashboard's Domains tab sets, per domain: max mailboxes, max
 aliases per mailbox, and a storage quota (MB) per mailbox -- each falls
-back to a global default in `./.env/api.env`
+back to a global default in `./env/api.env`
 (`MAX_MAILBOXES_PER_DOMAIN`/`MAX_ALIASES_PER_MAILBOX`/`DEFAULT_MAILBOX_QUOTA_MB`)
 when unset. It also generates copy-pasteable MX/A/SPF/DMARC records for
 the domain (DKIM is flagged as unavailable -- see Known follow-ups). Only
@@ -68,11 +68,13 @@ their own domain.
 
 ## Environment
 
-Each component's config lives in its own file under `./.env/`
-(`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `server.env`, ...)
-rather than one shared `.env`. Update the passwords before any real
-deployment -- checked-in values are placeholders. Full variable list per
-file: [`_docs/SETUP.md`](./_docs/SETUP.md#environment-files-env).
+Each component's config lives in its own file under `./env/`
+(`postfix.env`, `dovecot.env`, `rspamd.env`, `api.env`, `server.env`, ...),
+loaded into containers via `env_file:`. The root `.env` is separate and
+tiny -- just `MAIL_HOSTNAME` and `APP_VERSION`, which `docker compose`
+auto-loads for `${...}` interpolation. Update the passwords before any
+real deployment -- checked-in values are placeholders. Full variable list
+per file: [`_docs/SETUP.md`](./_docs/SETUP.md#environment-files-env).
 
 ## Frontends + API
 

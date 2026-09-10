@@ -62,7 +62,7 @@ try {
   }
   await conn.commit();
   console.log(
-    `For full super-admin access, also add "${normalizedEmail}" to SUPER_ADMIN_EMAILS in ./.env/api.env and recreate the container.`,
+    `For full super-admin access, also add "${normalizedEmail}" to SUPER_ADMIN_EMAILS in ./env/api.env and recreate the container.`,
   );
 } catch (err) {
   await conn.rollback();

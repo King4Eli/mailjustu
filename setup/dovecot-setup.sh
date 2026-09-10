@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Checks .env/dovecot.env exists. provision_dovecot_auth() writes real
+# Checks env/dovecot.env exists. provision_dovecot_auth() writes real
 # login auth into the dovecot_config volume -- without it, login just
 # never works (image default has no usable passdb). See config/dovecot/auth.conf.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source ./setup/common.sh
 
-setup_dovecot() { require_env .env/dovecot.env; }
+setup_dovecot() { require_env env/dovecot.env; }
 
 # Must run after `docker compose up -d` has started mail_justu_dovecot at
 # least once -- on a brand new volume, writing conf.d files in first makes

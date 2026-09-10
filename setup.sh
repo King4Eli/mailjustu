@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Brings up the mail_justu stack. Each check lives in its own
 # ./setup/<service>-setup.sh (also runnable standalone) -- they only
-# verify .env/*.env files exist, they never write one. Missing a file?
+# verify env/*.env files exist, they never write one. Missing a file?
 # Add it, then re-run.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -32,7 +32,7 @@ Usage: ./setup.sh [options]
   --no-clamav             Skip the clamav overlay
   --bootstrap-admin       Create/reset the super admin after startup,
                           using SUPER_ADMIN_EMAILS / SUPER_ADMIN_PASSWORD
-                          from .env/api.env
+                          from env/api.env
   -y, --yes               Don't prompt for confirmation
   -h, --help              Show this help
 EOF
@@ -64,21 +64,20 @@ echo "docker + docker compose + envsubst OK"
 
 setup_network
 
-log "Checking .env/ files"
+log "Checking env/ files"
 setup_postfix
 setup_dovecot
 setup_rspamd
 setup_server_env
 
-confirm "Have you personalized .env/*.env for this server (domain, hostname, admin, secrets)?" || die "edit .env/*.env for this deployment, then re-run ./setup.sh"
+confirm "Have you personalized env/*.env for this server (domain, hostname, admin, secrets)?" || die "edit env/*.env for this deployment, then re-run ./setup.sh"
 
 setup_server_mysql
 
-# --env-file makes docker-compose.yml's ${MAIL_HOSTNAME} etc. resolve --
-# there's no root .env file for compose to find automatically (.env/ is a
-# directory of per-service files), so this must be explicit everywhere
-# compose is invoked, not just here.
-COMPOSE_FILES=(--env-file .env/api.env -f docker-compose.yml)
+# ${MAIL_HOSTNAME}/${APP_VERSION} resolve from the root .env file, which
+# `docker compose` auto-loads from the project dir. Per-service process
+# env lives in ./env/*.env (loaded via each service's env_file:).
+COMPOSE_FILES=(-f docker-compose.yml)
 [[ "$MODE" == dev ]] && COMPOSE_FILES+=(-f docker-compose.override.yml)
 $WITH_RSPAMD   && COMPOSE_FILES+=(-f docker-compose.rspamd.yml)
 $WITH_OPENDKIM && COMPOSE_FILES+=(-f docker-compose.opendkim.yml)
@@ -108,8 +107,8 @@ docker compose "${COMPOSE_FILES[@]}" ps
 
 if $BOOTSTRAP_ADMIN; then
   log "Bootstrapping super admin"
-  ADMIN_EMAIL="$(env_value .env/api.env SUPER_ADMIN_EMAILS)"
-  ADMIN_PASSWORD="$(env_value .env/api.env SUPER_ADMIN_PASSWORD)"
+  ADMIN_EMAIL="$(env_value env/api.env SUPER_ADMIN_EMAILS)"
+  ADMIN_PASSWORD="$(env_value env/api.env SUPER_ADMIN_PASSWORD)"
   docker exec mail_justu_server node scripts/bootstrap-admin.js "$ADMIN_EMAIL" "$ADMIN_PASSWORD"
 fi
 
