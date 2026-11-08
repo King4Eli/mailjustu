@@ -19,6 +19,13 @@ setup_server_mysql() {
     warn "global_mysql container not found -- it's external to this project, start/provision it separately"
   elif docker exec global_mysql mysql -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1" "$DB_NAME" >/dev/null 2>&1; then
     echo "global_mysql reachable, $DB_NAME database + $DB_USER credentials OK"
+    # Idempotent: schema.sql is only CREATE TABLE IF NOT EXISTS, so this
+    # creates missing tables and never touches existing ones/data.
+    log "Applying schema to $DB_NAME"
+    docker exec -i global_mysql mysql -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" \
+      < _docs/schema.sql 2> >(grep -v "Using a password on the command line" >&2) \
+      || die "applying _docs/schema.sql failed"
+    echo "schema OK"
   else
     warn "could not connect to $DB_NAME as $DB_USER on global_mysql -- create the database/user there first"
   fi

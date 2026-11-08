@@ -15,9 +15,9 @@ services:
       - certs:/etc/ssl/mail
       - postfix_spool:/var/spool/postfix
     ports:
-      - "25:25"
-      - "465:465"
-      - "587:587"
+      - "10.50.0.2:25:25"
+      - "10.50.0.2:465:465"
+      - "10.50.0.2:587:587"
     networks:
       - mail_justu_network
 
@@ -42,14 +42,14 @@ services:
       # This image runs rootless: imap-login actually binds the unprivileged
       # 31143/31993 (see /etc/dovecot/vendor.d/rootless.conf in the
       # dovecot_config volume), not 143/993.
-      - "143:31143"
-      - "993:31993"
+      - "10.50.0.2:143:31143"
+      - "10.50.0.2:993:31993"
     networks:
       - mail_justu_network
 
   # Next.js server: webmail + admin dashboard at /webmail, /admin, /api
   mail_justu_server:
-    image: rg2.vintolab.com/mail_justu_server:${APP_VERSION:?APP_VERSION must be set}
+    image: ghcr.io/king4eli/mailjustu-server:${APP_VERSION:?APP_VERSION must be set}
     container_name: mail_justu_server
     restart: unless-stopped
     environment:

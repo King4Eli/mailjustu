@@ -2,7 +2,11 @@ import { NextRequest } from "next/server";
 import { withImap } from "@/lib/api/imap";
 import { createSession, isSuperAdminEmail } from "@/lib/api/auth";
 import { pool } from "@/lib/api/db";
-import { apiError, withApiErrors } from "@/lib/api/handler";
+import {
+  apiError,
+  isServiceUnavailableError,
+  withApiErrors,
+} from "@/lib/api/handler";
 import {
   isRateLimited,
   recordFailedAttempt,
@@ -27,8 +31,11 @@ function clientIp(req: NextRequest): string {
 export async function POST(req: NextRequest) {
   return withApiErrors(async () => {
     const { email, password } = (await req.json().catch(() => ({}))) || {};
-    if (!email || !password) {
-      return apiError(400, "email and password are required");
+    if (typeof email !== "string" || !email.trim()) {
+      return apiError(400, "Please enter your email address");
+    }
+    if (typeof password !== "string" || !password) {
+      return apiError(400, "Please enter your password");
     }
     const normalizedEmail = email.trim().toLowerCase();
     const emailKey = `login:email:${normalizedEmail}`;
@@ -50,10 +57,31 @@ export async function POST(req: NextRequest) {
     try {
       await withImap(normalizedEmail, password, async () => {});
     } catch (err) {
+      console.error("IMAP login failed for", normalizedEmail, err);
+      // imapflow flags a rejected LOGIN/AUTHENTICATE with authenticationFailed;
+      // anything else (server down, TLS failure, timeout) isn't the user's
+      // fault and shouldn't count against their rate limit.
+      const e = err as { authenticationFailed?: boolean; responseStatus?: string };
+      if (
+        !e?.authenticationFailed &&
+        e?.responseStatus !== "NO" &&
+        isServiceUnavailableError(err)
+      ) {
+        return apiError(
+          503,
+          "Mail server is unavailable right now. Please try again in a moment.",
+        );
+      }
       recordFailedAttempt(emailKey, LOGIN_RATE_LIMIT_WINDOW_MS);
       recordFailedAttempt(ipKey, LOGIN_RATE_LIMIT_WINDOW_MS);
-      console.error("IMAP login failed for", normalizedEmail, err);
-      return apiError(401, "Invalid email or password");
+      const nowLimited = isRateLimited(emailKey, LOGIN_RATE_LIMIT_MAX_ATTEMPTS);
+      if (nowLimited.limited) {
+        return apiError(
+          429,
+          `Too many login attempts. Try again in ${Math.ceil(nowLimited.retryAfterSeconds / 60)} minute(s).`,
+        );
+      }
+      return apiError(401, "Incorrect email or password");
     }
     clearAttempts(emailKey);
     clearAttempts(ipKey);

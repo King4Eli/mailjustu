@@ -4,7 +4,7 @@ services:
   mail_justu_server:
     build:
       context: ./bigapp
-    ports:
+    ports: !override
       - "9080:80"
 
 # volumes:

@@ -30,45 +30,86 @@ function clearSession() {
   localStorage.removeItem(ROLE_KEY);
 }
 
-class ApiError extends Error {}
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status = 0,
+  ) {
+    super(message);
+  }
+}
 
-// Fired the moment any request comes back 401 -- see App.tsx's listener.
+// Fired the moment any authenticated request comes back 401 -- see App.tsx's listener.
 let sessionExpiredHandler: (() => void) | null = null;
 
 export function onSessionExpired(handler: () => void) {
   sessionExpiredHandler = handler;
 }
 
-async function apiFetch(path: string, options: RequestInit = {}) {
+// Fallback text when the server (or the proxy in front of it) didn't send a
+// JSON `{ error }` body -- e.g. an HTML 502 page while the backend restarts.
+function statusMessage(status: number): string {
+  if (status === 400) return "The request was invalid.";
+  if (status === 403) return "You don't have permission to do that.";
+  if (status === 404) return "Not found.";
+  if (status === 413) return "That's too large to upload.";
+  if (status === 429) return "Too many requests. Please wait and try again.";
+  if (status === 502 || status === 503 || status === 504)
+    return "The server is unavailable right now. Please try again shortly.";
+  if (status >= 500) return "Something went wrong on the server.";
+  return `Request failed (${status})`;
+}
+
+async function rawFetch(path: string, options: RequestInit = {}) {
   const session = getStoredSession();
   const isFormData = options.body instanceof FormData;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
-      ...(options.body && !isFormData
-        ? { "Content-Type": "application/json" }
-        : {}),
-      ...options.headers,
-    },
-  });
+  try {
+    return await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
+        ...(options.body && !isFormData
+          ? { "Content-Type": "application/json" }
+          : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(
+      navigator.onLine === false
+        ? "You're offline. Check your internet connection."
+        : "Can't reach the server. Check your connection and try again.",
+    );
+  }
+}
+
+async function errorFromResponse(res: Response): Promise<ApiError> {
+  const body = await res.json().catch(() => ({}));
+  return new ApiError(
+    (typeof body?.error === "string" && body.error) || statusMessage(res.status),
+    res.status,
+  );
+}
+
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const res = await rawFetch(path, options);
   if (res.status === 401) {
     clearSession();
     sessionExpiredHandler?.();
-    throw new ApiError("Session expired, please sign in again");
+    throw new ApiError("Session expired, please sign in again", 401);
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.error || `Request failed (${res.status})`);
-  }
+  if (!res.ok) throw await errorFromResponse(res);
   return res.json();
 }
 
 export async function login(email: string, password: string) {
-  const data = await apiFetch("/auth/login", {
+  // Not via apiFetch: a 401 here means wrong credentials, not an expired session.
+  const res = await rawFetch("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  if (!res.ok) throw await errorFromResponse(res);
+  const data = await res.json();
   setSession(data.token, data.email, data.role);
   return data as {
     token: string;
@@ -222,8 +263,7 @@ export async function downloadAttachment(
     `${API_BASE}/mail/messages/${uid}/attachments/${index}?folder=${encodeURIComponent(folder)}`,
     { headers: session ? { Authorization: `Bearer ${session.token}` } : {} },
   );
-  if (!res.ok)
-    throw new ApiError(`Failed to download attachment (${res.status})`);
+  if (!res.ok) throw await errorFromResponse(res);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -244,7 +284,7 @@ export async function fetchAttachmentAsFile(
     `${API_BASE}/mail/messages/${uid}/attachments/${index}?folder=${encodeURIComponent(folder)}`,
     { headers: session ? { Authorization: `Bearer ${session.token}` } : {} },
   );
-  if (!res.ok) throw new ApiError(`Failed to load attachment (${res.status})`);
+  if (!res.ok) throw await errorFromResponse(res);
   const blob = await res.blob();
   return new File([blob], filename, { type: blob.type });
 }

@@ -27,8 +27,14 @@ provision_postfix_maps() {
       < "config/postfix/$f.cf" > "$tmp/$f.cf"
   done
 
-  docker run --rm -v mail_justu_postfix_config:/target -v "$tmp:/src:ro" \
-    busybox sh -c 'cp /src/mysql-virtual-mailbox-domains.cf /src/mysql-virtual-mailbox-maps.cf /src/mysql-virtual-alias-maps.cf /src/mysql-virtual-mailbox-domains-ok.cf /target/'
+  # Streamed over stdin rather than bind-mounting $tmp: Docker Desktop only
+  # shares $HOME with its VM, so a /tmp mount fails with "mounts denied".
+  tar -C "$tmp" -cf - . \
+    | docker run --rm -i -v mail_justu_postfix_config:/target busybox \
+        tar -C /target -xof -
+  # They hold the DB password, and Postfix warns on group/other-writable maps.
+  docker exec mail_justu_postfix sh -c \
+    'chown root:postfix /etc/postfix/mysql-virtual-*.cf && chmod 0640 /etc/postfix/mysql-virtual-*.cf'
   docker restart mail_justu_postfix >/dev/null
 }
 

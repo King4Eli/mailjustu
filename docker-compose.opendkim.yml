@@ -10,6 +10,9 @@ services:
       - mail_justu_network
 
   mail_justu_dkim_sync:
+    # Published by .github/workflows/docker.yml; `build` kept so
+    # `--build` (or no registry access) still works from source.
+    image: ghcr.io/king4eli/mailjustu-dkim-sync:${APP_VERSION:?APP_VERSION must be set}
     build: ./dkim-sync
     container_name: mail-dkim-sync
     restart: unless-stopped

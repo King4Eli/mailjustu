@@ -18,35 +18,60 @@ export function clearStoredSession() {
 
 class ApiError extends Error {}
 
-async function apiFetch(path, options = {}) {
+function statusMessage(status) {
+  if (status === 403) return "You don't have permission to do that.";
+  if (status === 404) return "Not found.";
+  if (status === 429) return "Too many requests. Please wait and try again.";
+  if (status === 502 || status === 503 || status === 504)
+    return "The server is unavailable right now. Please try again shortly.";
+  if (status >= 500) return "Something went wrong on the server.";
+  return `Request failed (${status})`;
+}
+
+async function rawFetch(path, options = {}) {
   const session = getStoredSession();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...options.headers,
-    },
-  });
+  try {
+    return await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(
+      navigator.onLine === false
+        ? "You're offline. Check your internet connection."
+        : "Can't reach the server. Check your connection and try again.",
+    );
+  }
+}
+
+async function errorFromResponse(res) {
+  const body = await res.json().catch(() => ({}));
+  return new ApiError(
+    (typeof body?.error === "string" && body.error) || statusMessage(res.status),
+  );
+}
+
+async function apiFetch(path, options = {}) {
+  const res = await rawFetch(path, options);
   if (res.status === 401) {
     clearStoredSession();
-    throw new ApiError("Not authorized");
+    throw new ApiError("Session expired, please sign in again");
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.error || `Request failed (${res.status})`);
-  }
+  if (!res.ok) throw await errorFromResponse(res);
   return res.json();
 }
 
 export async function login(email, password) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await rawFetch("/auth/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error || "Sign in failed");
+  if (!res.ok) throw await errorFromResponse(res);
+  const data = await res.json();
   if (data.role !== "super" && data.role !== "domain") {
     throw new ApiError("This account doesn't have admin access");
   }

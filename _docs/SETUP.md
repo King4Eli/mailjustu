@@ -106,7 +106,19 @@ Each is `env_file:`-loaded into whichever container(s) need it (see
 Root `.env` is separate -- auto-loaded for `${...}` interpolation only,
 never an `env_file:`, never injected. Holds `MAIL_HOSTNAME` (Postfix
 `hostname:` + server DNS-record gen, re-exported via `environment:`) and
-`APP_VERSION` (server image tag).
+`APP_VERSION` (image tag for `ghcr.io/king4eli/mailjustu-server` and
+`ghcr.io/king4eli/mailjustu-dkim-sync`).
+
+### Images (GitHub Container Registry)
+
+`.github/workflows/docker.yml` tests `bigapp`, then builds and pushes both
+images: pushes to `main` -> `:main`, `:latest`, `:sha-<short>`; tags
+`v1.2.3` -> `:1.2.3`, `:1.2`. PRs build without pushing. Set
+`APP_VERSION` to one of those tags. GHCR packages are private by default,
+so on the server first run
+`echo <PAT with read:packages> | docker login ghcr.io -u <github-user> --password-stdin`
+(or make the packages public in GitHub). Dev mode
+(`docker-compose.override.yml`) and `--build` still build from source.
 
 - **`api.env`** -- the big one, loaded into `mail_justu_server` (and
   partially into `mail_justu_dovecot`, for the DB passdb lookup):

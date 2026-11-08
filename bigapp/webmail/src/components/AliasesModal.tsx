@@ -36,7 +36,7 @@ export function AliasesModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
       <div
-        className="w-full max-w-md rounded-2xl border p-5 shadow-xl"
+        className="flex max-h-[85vh] w-full max-w-md flex-col rounded-2xl border p-5 shadow-xl"
         style={{
           background: "var(--bg-elevated)",
           borderColor: "var(--border)",
@@ -48,6 +48,14 @@ export function AliasesModal({
             style={{ color: "var(--text)" }}
           >
             Your aliases
+            {aliases.length > 0 && (
+              <span
+                className="ml-1.5 font-normal"
+                style={{ color: "var(--text-faint)" }}
+              >
+                ({aliases.length})
+              </span>
+            )}
           </h2>
           <button onClick={onClose} style={{ color: "var(--text-faint)" }}>
             <X size={20} />
@@ -86,16 +94,20 @@ export function AliasesModal({
           </p>
         )}
 
-        <div className="flex flex-col gap-1">
+        <div className="-mr-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-2">
           {aliases.map((a) => (
             <div
               key={a.id}
-              className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
+              className="flex shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
               style={{ background: "var(--bg-hover)", color: "var(--text)" }}
             >
-              <span>{a.source}</span>
+              <span className="min-w-0 truncate" title={a.source}>
+                {a.source}
+              </span>
               <button
                 onClick={() => onDelete(a.id)}
+                aria-label={`Delete alias ${a.source}`}
+                className="shrink-0"
                 style={{ color: "var(--text-faint)" }}
               >
                 <Trash2 size={16} />
